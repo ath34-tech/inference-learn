@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vocabulary · InferenceLearn</title>
+  <meta name="description" content="Every inference-engineering term explained in plain English with an analogy: KV cache, TTFT, GQA, PagedAttention, quantization, speculative decoding, tensor parallelism and more.">
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <link rel="alternate" type="text/markdown" href="vocabulary.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Vocabulary", "description": "Every term in the course with a plain-English definition and analogy, grouped by category, with a flashcard mode.", "url": "vocabulary.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="vocabulary">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// item descriptions</span>
+    <h1>Vocabulary</h1>
+    <p>Every term in the course in plain English. Most come with a "≈" analogy to make them stick. Search the list, or switch to <strong>flashcards</strong> to drill them.</p>
+  </section>
+
+  <section class="container" style="padding-top:24px">
+    <div class="vocab-tools">
+      <div class="filters" id="vocab-tabs" style="margin-bottom:16px">
+        <button class="chip on" data-tab="list">📖 List</button>
+        <button class="chip" data-tab="flash">🃏 Flashcards</button>
+      </div>
+      <label for="vocab-q" class="sr-only">Search terms</label>
+      <input id="vocab-q" class="filter-input" type="search" placeholder="search… e.g. kv, batch, fp8" autocomplete="off">
+      <div class="filters" id="vocab-cats" style="margin:16px 0 0">
+        <button class="chip on" data-f="all">All</button>
+        <button class="chip" data-f="basics">Basics</button>
+        <button class="chip" data-f="hardware">Hardware</button>
+        <button class="chip" data-f="metrics">Metrics</button>
+        <button class="chip" data-f="memory">Memory</button>
+        <button class="chip" data-f="batching">Batching</button>
+        <button class="chip" data-f="attention">Attention</button>
+        <button class="chip" data-f="quant">Quantization</button>
+        <button class="chip" data-f="decoding">Decoding</button>
+        <button class="chip" data-f="parallel">Parallelism</button>
+        <button class="chip" data-f="kernels">Kernels</button>
+        <button class="chip" data-f="systems">Production</button>
+      </div>
+      <div class="progress-meta"><span id="vocab-count"></span><span>click a category to focus</span></div>
+    </div>
+
+    <!-- FLASHCARDS -->
+    <div id="vocab-flash" class="flash-wrap" hidden>
+      <div class="flashcard" id="flashcard" role="button" tabindex="0" aria-label="Flashcard, click to flip">
+        <div class="fc-inner">
+          <div class="fc-face fc-front" id="fc-front"></div>
+          <div class="fc-face fc-back" id="fc-back"></div>
+        </div>
+      </div>
+      <div class="fc-actions">
+        <button class="btn small" id="fc-know">✓ I know it</button>
+        <button class="btn small alt" id="fc-again">↻ Still learning</button>
+        <button class="btn small alt" id="fc-shuffle">Shuffle</button>
+        <button class="btn small alt" id="fc-reset">Reset progress</button>
+      </div>
+      <p style="text-align:center;margin-top:14px"><label class="muted" style="cursor:pointer"><input type="checkbox" id="fc-only-new" checked> only show cards I don't know yet</label></p>
+      <p id="fc-meta"></p>
+    </div>
+
+    <!-- LIST -->
+    <div id="vocab-list">
+
+    <div class="vocab-group"><h2>Basics</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-inference" data-cat="basics"><dt>Inference</dt><dd>Running a trained model on new inputs to produce outputs. No learning happens, only forward passes. <span class="vx">Training is writing the cookbook; inference is cooking from it for every customer.</span></dd></div>
+      <div class="card vocab-card" id="v-token" data-cat="basics"><dt>Token</dt><dd>The unit an LLM reads and writes: an integer ID from the tokenizer's vocabulary. An English token is about ¾ of a word. <span class="vx">Lego bricks that text is built from.</span></dd></div>
+      <div class="card vocab-card" id="v-tokenizer" data-cat="basics"><dt>Tokenizer</dt><dd>Converts text to token IDs and back (e.g. BPE). Its vocabulary usually has 32k–256k entries.</dd></div>
+      <div class="card vocab-card" id="v-embedding" data-cat="basics"><dt>Embedding</dt><dd>A learned vector (e.g. 4096 numbers) looked up for each token ID. It's the model's internal representation of the token.</dd></div>
+      <div class="card vocab-card" id="v-logits" data-cat="basics"><dt>Logits</dt><dd>The model's raw, unnormalized scores, one for every vocabulary token. Softmax turns them into probabilities.</dd></div>
+      <div class="card vocab-card" id="v-softmax" data-cat="basics"><dt>Softmax</dt><dd>Turns a list of scores into probabilities that add up to 1: exp(xᵢ) ÷ Σ exp(xⱼ).</dd></div>
+      <div class="card vocab-card" id="v-autoregressive-decoding" data-cat="basics"><dt>Autoregressive decoding</dt><dd>Generating one token at a time and feeding each new token back in as input for the next step. <span class="vx">Writing a sentence where you can only see the words you've already written.</span></dd></div>
+      <div class="card vocab-card" id="v-prefill" data-cat="basics"><dt>Prefill</dt><dd>The first phase of a request: process the whole prompt in parallel, build its KV cache, and produce the first token. Compute-bound. <span class="vx">Reading the whole question before you start answering.</span></dd></div>
+      <div class="card vocab-card" id="v-decode" data-cat="basics"><dt>Decode</dt><dd>The phase that produces output tokens one per step. Each step reads all the weights for very little math, so it's memory-bandwidth-bound.</dd></div>
+      <div class="card vocab-card" id="v-greedy-decoding" data-cat="basics"><dt>Greedy decoding</dt><dd>Always picking the single most likely next token (argmax). Deterministic, but can be repetitive.</dd></div>
+      <div class="card vocab-card" id="v-temperature" data-cat="basics"><dt>Temperature</dt><dd>Divides logits before softmax. Below 1 makes outputs more focused, above 1 more random, and 0 means greedy. <span class="vx">A creativity dial.</span></dd></div>
+      <div class="card vocab-card" id="v-top-k-sampling" data-cat="basics"><dt>Top-k sampling</dt><dd>Sample only from the k most likely tokens.</dd></div>
+      <div class="card vocab-card" id="v-top-p-nucleus-sampling" data-cat="basics"><dt>Top-p (nucleus) sampling</dt><dd>Sample from the smallest set of tokens whose probabilities add up to at least p (e.g. 0.95). The set grows when the model is unsure.</dd></div>
+      <div class="card vocab-card" id="v-eos-token" data-cat="basics"><dt>EOS token</dt><dd>End-of-sequence token. When the model emits it, generation for that request stops.</dd></div>
+      <div class="card vocab-card" id="v-context-length" data-cat="basics"><dt>Context length</dt><dd>The number of tokens (prompt plus output) a sequence holds. The KV cache grows linearly with it.</dd></div>
+      <div class="card vocab-card" id="v-self-attention" data-cat="basics"><dt>Self-attention</dt><dd>The layer where each token computes a query, key and value, and mixes in information from earlier tokens weighted by query·key similarity.</dd></div>
+      <div class="card vocab-card" id="v-causal-mask" data-cat="basics"><dt>Causal mask</dt><dd>Stops a token from attending to future tokens. It's why past keys and values never change, and so why they can be cached.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>GPU &amp; hardware</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-gpu" data-cat="hardware"><dt>GPU</dt><dd>A massively parallel processor with thousands of cores and specialized matrix units. The workhorse of LLM inference.</dd></div>
+      <div class="card vocab-card" id="v-streaming-multiprocessor-sm" data-cat="hardware"><dt>Streaming Multiprocessor (SM)</dt><dd>One of the GPU's many independent compute units (132 on an H100 SXM). Each has cores, tensor cores, registers and shared memory. <span class="vx">One kitchen station in a huge restaurant.</span></dd></div>
+      <div class="card vocab-card" id="v-tensor-cores" data-cat="hardware"><dt>Tensor cores</dt><dd>Specialized units for very fast matrix multiply-accumulate at low precision (BF16, FP8, FP4). Most of a GPU's FLOPs come from them.</dd></div>
+      <div class="card vocab-card" id="v-hbm" data-cat="hardware"><dt>HBM</dt><dd>High-Bandwidth Memory: the GPU's main memory (e.g. 80 GB at ~3.35 TB/s on H100). It holds the weights and KV cache. <span class="vx">The warehouse: huge, but a walk away.</span></dd></div>
+      <div class="card vocab-card" id="v-sram-shared-memory" data-cat="hardware"><dt>SRAM / shared memory</dt><dd>Small, very fast on-chip memory per SM (~228 KB on H100). Kernels stage tiles of data here. <span class="vx">The cutting board: tiny, but right under your hands.</span></dd></div>
+      <div class="card vocab-card" id="v-memory-bandwidth" data-cat="hardware"><dt>Memory bandwidth</dt><dd>How many bytes per second can move between HBM and the compute units. It sets decode speed.</dd></div>
+      <div class="card vocab-card" id="v-flops" data-cat="hardware"><dt>FLOPs</dt><dd>Floating-point operations. A forward pass costs about 2 × parameters FLOPs per token. FLOP/s (per second) measures compute speed.</dd></div>
+      <div class="card vocab-card" id="v-arithmetic-intensity" data-cat="hardware"><dt>Arithmetic intensity</dt><dd>FLOPs done per byte moved from memory. For LLM linear layers in BF16 it's roughly the number of tokens in the batch. <span class="vx">How much cooking you do per trip to the warehouse.</span></dd></div>
+      <div class="card vocab-card" id="v-roofline-model" data-cat="hardware"><dt>Roofline model</dt><dd>Attainable performance = min(peak FLOP/s, intensity × bandwidth). It tells you which limit you'll hit first.</dd></div>
+      <div class="card vocab-card" id="v-ridge-point" data-cat="hardware"><dt>Ridge point</dt><dd>Peak FLOP/s ÷ bandwidth: the intensity where a GPU switches from memory-bound to compute-bound (~295 FLOP/byte on H100).</dd></div>
+      <div class="card vocab-card" id="v-memory-bound" data-cat="hardware"><dt>Memory-bound</dt><dd>Limited by how fast data moves, not by math. Compute units sit idle waiting for bytes. Typical of decode.</dd></div>
+      <div class="card vocab-card" id="v-compute-bound" data-cat="hardware"><dt>Compute-bound</dt><dd>Limited by math throughput. Memory keeps up and the tensor cores are the bottleneck. Typical of prefill and large batches.</dd></div>
+      <div class="card vocab-card" id="v-bf16" data-cat="hardware"><dt>BF16</dt><dd>bfloat16: a 16-bit float with FP32's range (8-bit exponent) but less precision. The default serving precision.</dd></div>
+      <div class="card vocab-card" id="v-nvlink" data-cat="hardware"><dt>NVLink</dt><dd>NVIDIA's high-bandwidth GPU-to-GPU link (~900 GB/s per GPU on H100). Essential for fast tensor parallelism.</dd></div>
+      <div class="card vocab-card" id="v-pcie" data-cat="hardware"><dt>PCIe</dt><dd>The general-purpose bus between GPU and CPU (~64 GB/s each way for PCIe 5 x16). Much slower than NVLink.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Metrics</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-ttft" data-cat="metrics"><dt>TTFT</dt><dd>Time To First Token: from sending the request to receiving the first token. Includes queueing and prefill. <span class="vx">How long until the waiter says "coming right up".</span></dd></div>
+      <div class="card vocab-card" id="v-itl" data-cat="metrics"><dt>ITL</dt><dd>Inter-Token Latency: the gap between consecutive streamed tokens.</dd></div>
+      <div class="card vocab-card" id="v-tpot" data-cat="metrics"><dt>TPOT</dt><dd>Time Per Output Token: a request's average decode time per token, (E2E − TTFT) ÷ (tokens − 1).</dd></div>
+      <div class="card vocab-card" id="v-e2e-latency" data-cat="metrics"><dt>E2E latency</dt><dd>End-to-end time for the full response ≈ TTFT + TPOT × (output tokens − 1).</dd></div>
+      <div class="card vocab-card" id="v-throughput" data-cat="metrics"><dt>Throughput</dt><dd>Work done per second across all users, usually output tokens/s. Higher throughput means lower cost per token.</dd></div>
+      <div class="card vocab-card" id="v-goodput" data-cat="metrics"><dt>Goodput</dt><dd>Throughput counting only requests that met their latency SLOs. <span class="vx">Pizzas delivered hot, not just pizzas delivered.</span></dd></div>
+      <div class="card vocab-card" id="v-slo" data-cat="metrics"><dt>SLO</dt><dd>Service Level Objective: a latency or availability target, e.g. "p90 TTFT under 500 ms".</dd></div>
+      <div class="card vocab-card" id="v-percentile-latency-p50-p99" data-cat="metrics"><dt>Percentile latency (p50/p99)</dt><dd>p99 = 99% of requests are faster than this. Tail percentiles reveal spikes that averages hide.</dd></div>
+      <div class="card vocab-card" id="v-little-s-law" data-cat="metrics"><dt>Little's law</dt><dd>Concurrency = throughput × latency. 20 req/s × 10 s means ~200 requests in flight.</dd></div>
+      <div class="card vocab-card" id="v-mfu" data-cat="metrics"><dt>MFU</dt><dd>Model FLOPs Utilization: achieved FLOP/s ÷ peak. The efficiency metric for compute-bound work.</dd></div>
+      <div class="card vocab-card" id="v-mbu" data-cat="metrics"><dt>MBU</dt><dd>Model Bandwidth Utilization: achieved bytes/s ÷ peak bandwidth. The efficiency metric for decode. 60–80% is good.</dd></div>
+      <div class="card vocab-card" id="v-cost-per-million-tokens" data-cat="metrics"><dt>Cost per million tokens</dt><dd>GPU $/hour ÷ (tokens/s × 3600) × 10⁶. The number that ends up on the invoice.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Memory &amp; KV cache</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-kv-cache" data-cat="memory"><dt>KV cache</dt><dd>Stored key and value vectors for all previous tokens, so each decode step only computes the new token's K/V. Size = 2 × layers × KV heads × head dim × bytes, per token. <span class="vx">Notes from earlier in the conversation, so you don't reread the whole chat every time.</span></dd></div>
+      <div class="card vocab-card" id="v-kv-head" data-cat="memory"><dt>KV head</dt><dd>A key/value head. With GQA, several query heads share one, so fewer KV heads means a smaller cache.</dd></div>
+      <div class="card vocab-card" id="v-kv-cache-quantization" data-cat="memory"><dt>KV cache quantization</dt><dd>Storing K/V in FP8, INT8 or INT4 to halve or quarter cache memory and bandwidth.</dd></div>
+      <div class="card vocab-card" id="v-fragmentation" data-cat="memory"><dt>Fragmentation</dt><dd>Wasted memory: reserved-but-unused space (internal) or free gaps too small to use (external). PagedAttention mostly eliminates it.</dd></div>
+      <div class="card vocab-card" id="v-prefix-caching" data-cat="memory"><dt>Prefix caching</dt><dd>Reusing KV for prompt prefixes shared across requests (system prompts, chat history), so prefill skips them.</dd></div>
+      <div class="card vocab-card" id="v-radixattention" data-cat="memory"><dt>RadixAttention</dt><dd>SGLang's prefix cache, organized as a radix tree over token sequences, with token-level matching and natural branching.</dd></div>
+      <div class="card vocab-card" id="v-reference-counting" data-cat="memory"><dt>Reference counting</dt><dd>Tracking how many running sequences use a KV block. Only blocks with count 0 may be evicted.</dd></div>
+      <div class="card vocab-card" id="v-lru-eviction" data-cat="memory"><dt>LRU eviction</dt><dd>Least-Recently-Used: when memory is needed, drop the cached block that was used longest ago.</dd></div>
+      <div class="card vocab-card" id="v-copy-on-write" data-cat="memory"><dt>Copy-on-write</dt><dd>Sequences share the same physical KV blocks until one of them writes something different. Only then is a private copy made.</dd></div>
+      <div class="card vocab-card" id="v-kv-offloading" data-cat="memory"><dt>KV offloading</dt><dd>Moving cold KV blocks from GPU memory to CPU RAM, SSD or remote storage, and loading them back when needed.</dd></div>
+      <div class="card vocab-card" id="v-cache-hit-rate" data-cat="memory"><dt>Cache hit rate</dt><dd>The fraction of prompt tokens served from the prefix cache. A sudden drop often means a prompt template changed.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Batching &amp; scheduling</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-batch-size" data-cat="batching"><dt>Batch size</dt><dd>How many sequences are processed together in one forward step. Bigger batches amortize weight reads.</dd></div>
+      <div class="card vocab-card" id="v-static-batching" data-cat="batching"><dt>Static batching</dt><dd>Form a batch, pad it, and run until every sequence finishes. Simple but wasteful. <span class="vx">A bus that won't leave until the last passenger arrives, and won't let anyone on mid-route.</span></dd></div>
+      <div class="card vocab-card" id="v-dynamic-batching" data-cat="batching"><dt>Dynamic batching</dt><dd>Wait a short window or until the batch is full, then run. Good for fixed-cost models, but still request-level.</dd></div>
+      <div class="card vocab-card" id="v-continuous-batching" data-cat="batching"><dt>Continuous batching</dt><dd>Iteration-level scheduling: sequences join and leave the running batch at every decode step. Also called in-flight batching. <span class="vx">A conveyor-belt sushi bar: seats free up and fill instantly.</span></dd></div>
+      <div class="card vocab-card" id="v-ragged-batch" data-cat="batching"><dt>Ragged batch</dt><dd>A batch whose sequences have different lengths, packed without padding. Kernels get per-sequence offsets.</dd></div>
+      <div class="card vocab-card" id="v-head-of-line-blocking" data-cat="batching"><dt>Head-of-line blocking</dt><dd>New work stuck waiting behind slow work already in progress.</dd></div>
+      <div class="card vocab-card" id="v-chunked-prefill" data-cat="batching"><dt>Chunked prefill</dt><dd>Splitting a long prompt's prefill into chunks that share engine steps with running decodes, so token streams don't freeze.</dd></div>
+      <div class="card vocab-card" id="v-token-budget" data-cat="batching"><dt>Token budget</dt><dd>The maximum number of tokens (prefill chunks plus decodes) processed in one engine step, e.g. vLLM's max-num-batched-tokens.</dd></div>
+      <div class="card vocab-card" id="v-preemption" data-cat="batching"><dt>Preemption</dt><dd>Evicting a running sequence when KV memory runs out, then recomputing or swapping its cache in later.</dd></div>
+      <div class="card vocab-card" id="v-admission-control" data-cat="batching"><dt>Admission control</dt><dd>Deciding whether to accept, queue or reject new requests, so the system doesn't overload and collapse.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Attention</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-mha" data-cat="attention"><dt>MHA</dt><dd>Multi-Head Attention: every query head has its own key and value head. Best quality, biggest KV cache.</dd></div>
+      <div class="card vocab-card" id="v-mqa" data-cat="attention"><dt>MQA</dt><dd>Multi-Query Attention: all query heads share a single K/V head. The smallest cache, with some quality risk.</dd></div>
+      <div class="card vocab-card" id="v-gqa" data-cat="attention"><dt>GQA</dt><dd>Grouped-Query Attention: groups of query heads share a K/V head (e.g. 32 Q heads, 8 KV heads), so the cache is 4× smaller than MHA. <span class="vx">Roommates sharing one fridge instead of each buying their own.</span></dd></div>
+      <div class="card vocab-card" id="v-mla" data-cat="attention"><dt>MLA</dt><dd>Multi-head Latent Attention (DeepSeek): caches a compressed low-rank latent instead of full per-head K/V.</dd></div>
+      <div class="card vocab-card" id="v-flashattention" data-cat="attention"><dt>FlashAttention</dt><dd>An IO-aware exact attention kernel. It tiles Q/K/V in on-chip SRAM and never writes the N×N score matrix to HBM.</dd></div>
+      <div class="card vocab-card" id="v-online-softmax" data-cat="attention"><dt>Online softmax</dt><dd>Computing softmax chunk by chunk with a running max and sum, rescaling earlier results as you go. This makes tiling possible.</dd></div>
+      <div class="card vocab-card" id="v-pagedattention" data-cat="attention"><dt>PagedAttention</dt><dd>Stores the KV cache in fixed-size, non-contiguous blocks, like OS virtual-memory pages, to remove fragmentation. <span class="vx">A library storing a book's chapters on any free shelf, with an index card saying where each one is.</span></dd></div>
+      <div class="card vocab-card" id="v-block-table" data-cat="attention"><dt>Block table</dt><dd>The per-sequence map from logical KV blocks to physical memory blocks in PagedAttention.</dd></div>
+      <div class="card vocab-card" id="v-flash-decoding" data-cat="attention"><dt>Flash-Decoding</dt><dd>Splits the KV sequence across thread blocks during decode, so even small batches with long contexts use the whole GPU.</dd></div>
+      <div class="card vocab-card" id="v-sliding-window-attention" data-cat="attention"><dt>Sliding-window attention</dt><dd>Each token attends only to the last W tokens, which caps KV size per layer.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Quantization</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-quantization" data-cat="quant"><dt>Quantization</dt><dd>Storing numbers in fewer bits (8, 4…) to cut memory and bandwidth. Done well, with little quality loss. <span class="vx">Saving a photo as a smaller JPEG.</span></dd></div>
+      <div class="card vocab-card" id="v-scale-zero-point" data-cat="quant"><dt>Scale &amp; zero point</dt><dd>The mapping between real and integer values: q = round(x/s) + z, x̂ = s·(q − z). Symmetric quantization uses z = 0.</dd></div>
+      <div class="card vocab-card" id="v-per-group-quantization" data-cat="quant"><dt>Per-group quantization</dt><dd>One scale per small group of weights (e.g. 128), so an outlier only hurts its own group.</dd></div>
+      <div class="card vocab-card" id="v-w4a16-w8a8" data-cat="quant"><dt>W4A16 / W8A8</dt><dd>Notation for weight bits / activation bits. W4A16 = INT4 weights with BF16 math (weight-only). W8A8 = 8-bit weights and activations.</dd></div>
+      <div class="card vocab-card" id="v-fp8-e4m3-e5m2" data-cat="quant"><dt>FP8 (E4M3 / E5M2)</dt><dd>8-bit floating-point formats with native tensor-core support on Hopper and newer. A common near-lossless choice.</dd></div>
+      <div class="card vocab-card" id="v-fp4-nvfp4-mxfp4" data-cat="quant"><dt>FP4 (NVFP4 / MXFP4)</dt><dd>4-bit float formats with small-block scales, natively supported by Blackwell tensor cores.</dd></div>
+      <div class="card vocab-card" id="v-outliers" data-cat="quant"><dt>Outliers</dt><dd>A few activation channels with values 10–100× larger than the rest. They wreck naive INT8 scaling. <span class="vx">One giant in a class photo forces everyone else to be tiny.</span></dd></div>
+      <div class="card vocab-card" id="v-smoothquant" data-cat="quant"><dt>SmoothQuant</dt><dd>Moves activation outliers into the weights with an equivalent per-channel rescaling, enabling W8A8.</dd></div>
+      <div class="card vocab-card" id="v-gptq" data-cat="quant"><dt>GPTQ</dt><dd>Post-training quantization that uses second-order (Hessian) information to compensate for each rounding error column by column.</dd></div>
+      <div class="card vocab-card" id="v-awq" data-cat="quant"><dt>AWQ</dt><dd>Activation-aware Weight Quantization: scales up salient weight channels (those multiplied by large activations) before quantizing.</dd></div>
+      <div class="card vocab-card" id="v-calibration-set" data-cat="quant"><dt>Calibration set</dt><dd>A few hundred sample inputs used to measure activation ranges and statistics during post-training quantization.</dd></div>
+      <div class="card vocab-card" id="v-ptq" data-cat="quant"><dt>PTQ</dt><dd>Post-Training Quantization: quantizing an already-trained model without retraining it.</dd></div>
+      <div class="card vocab-card" id="v-gguf" data-cat="quant"><dt>GGUF</dt><dd>llama.cpp's single-file model format, with many quantization types (e.g. Q4_K_M).</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Decoding tricks</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-speculative-decoding" data-cat="decoding"><dt>Speculative decoding</dt><dd>Draft several tokens cheaply, then verify them all in one target-model pass. The output distribution is unchanged. <span class="vx">An intern drafts the email; the boss approves several sentences at a glance.</span></dd></div>
+      <div class="card vocab-card" id="v-draft-model" data-cat="decoding"><dt>Draft model</dt><dd>The cheap proposer in speculative decoding: a small model, n-gram lookup, or extra heads.</dd></div>
+      <div class="card vocab-card" id="v-target-model" data-cat="decoding"><dt>Target model</dt><dd>The big model whose output distribution you want. It verifies the drafts.</dd></div>
+      <div class="card vocab-card" id="v-acceptance-rate" data-cat="decoding"><dt>Acceptance rate</dt><dd>α: the probability that a drafted token is accepted. Expected tokens per pass = (1 − α^(k+1)) ÷ (1 − α).</dd></div>
+      <div class="card vocab-card" id="v-rejection-sampling" data-cat="decoding"><dt>Rejection sampling</dt><dd>Accept a draft token with probability min(1, p/q), otherwise resample from max(0, p − q). This makes speculation lossless.</dd></div>
+      <div class="card vocab-card" id="v-eagle-medusa" data-cat="decoding"><dt>EAGLE / Medusa</dt><dd>Speculative methods that draft with lightweight heads attached to the target model instead of a separate model.</dd></div>
+      <div class="card vocab-card" id="v-mtp" data-cat="decoding"><dt>MTP</dt><dd>Multi-Token Prediction: modules trained to predict several future tokens. They can serve as speculative drafts.</dd></div>
+      <div class="card vocab-card" id="v-tree-attention" data-cat="decoding"><dt>Tree attention</dt><dd>Verifying a tree of alternative drafts in one pass with a special attention mask.</dd></div>
+      <div class="card vocab-card" id="v-structured-output" data-cat="decoding"><dt>Structured output</dt><dd>Constraining generation to a JSON schema or grammar by masking invalid tokens at each step.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Parallelism</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-tensor-parallelism-tp" data-cat="parallel"><dt>Tensor parallelism (TP)</dt><dd>Splits each layer's weight matrices across GPUs, with all-reduces per layer. Lowers per-token latency. <span class="vx">Four chefs each chopping a quarter of every vegetable.</span></dd></div>
+      <div class="card vocab-card" id="v-pipeline-parallelism-pp" data-cat="parallel"><dt>Pipeline parallelism (PP)</dt><dd>Splits a model by layers across GPUs. Works across nodes, but doesn't make a single token faster. <span class="vx">An assembly line.</span></dd></div>
+      <div class="card vocab-card" id="v-pipeline-bubble" data-cat="parallel"><dt>Pipeline bubble</dt><dd>Idle time in pipeline stages while waiting for work. It's reduced by keeping several micro-batches in flight.</dd></div>
+      <div class="card vocab-card" id="v-data-parallelism-dp" data-cat="parallel"><dt>Data parallelism (DP)</dt><dd>Independent model replicas with requests load-balanced across them. Scales throughput.</dd></div>
+      <div class="card vocab-card" id="v-expert-parallelism-ep" data-cat="parallel"><dt>Expert parallelism (EP)</dt><dd>Places different MoE experts on different GPUs and routes tokens to them with all-to-all communication.</dd></div>
+      <div class="card vocab-card" id="v-moe" data-cat="parallel"><dt>MoE</dt><dd>Mixture of Experts: a router sends each token to a few of many expert MLPs. Total parameters ≫ active parameters. <span class="vx">A hospital: every patient sees only 2 specialists, but you employ 64.</span></dd></div>
+      <div class="card vocab-card" id="v-router-gating" data-cat="parallel"><dt>Router (gating)</dt><dd>The small network in an MoE layer that picks the top-k experts for each token.</dd></div>
+      <div class="card vocab-card" id="v-all-reduce" data-cat="parallel"><dt>All-reduce</dt><dd>A collective operation that sums tensors across GPUs and gives everyone the result. TP needs two per transformer layer.</dd></div>
+      <div class="card vocab-card" id="v-all-to-all" data-cat="parallel"><dt>All-to-all</dt><dd>A collective where every GPU sends a different chunk to every other GPU. Used for MoE token dispatch.</dd></div>
+      <div class="card vocab-card" id="v-context-parallelism-cp" data-cat="parallel"><dt>Context parallelism (CP)</dt><dd>Splits one long sequence across GPUs (e.g. Ring Attention) for very long contexts.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Kernels &amp; compilers</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-kernel" data-cat="kernels"><dt>Kernel</dt><dd>A function launched on the GPU across a grid of thread blocks. Eager PyTorch runs roughly one kernel per op.</dd></div>
+      <div class="card vocab-card" id="v-kernel-fusion" data-cat="kernels"><dt>Kernel fusion</dt><dd>Combining several ops into one kernel, so data stays in registers instead of round-tripping through HBM. <span class="vx">Doing all the errands in one trip instead of three.</span></dd></div>
+      <div class="card vocab-card" id="v-kernel-launch-overhead" data-cat="kernels"><dt>Kernel launch overhead</dt><dd>A few µs of CPU time per kernel launch. Significant when a decode step launches hundreds of small kernels.</dd></div>
+      <div class="card vocab-card" id="v-cuda-graph" data-cat="kernels"><dt>CUDA graph</dt><dd>A recorded sequence of kernel launches that is replayed with a single launch. Removes CPU overhead in decode. <span class="vx">A macro instead of typing every command.</span></dd></div>
+      <div class="card vocab-card" id="v-triton-language" data-cat="kernels"><dt>Triton (language)</dt><dd>A Python-embedded language and compiler for block-level GPU kernels. Not the same thing as Triton Inference Server.</dd></div>
+      <div class="card vocab-card" id="v-torch-compile" data-cat="kernels"><dt>torch.compile</dt><dd>PyTorch's compiler. It captures the model graph and generates fused kernels (via TorchInductor/Triton).</dd></div>
+      <div class="card vocab-card" id="v-cutlass" data-cat="kernels"><dt>CUTLASS</dt><dd>NVIDIA's C++ template library (with CuTe) for building high-performance GEMM and attention kernels.</dd></div>
+      <div class="card vocab-card" id="v-nsight-systems" data-cat="kernels"><dt>Nsight Systems</dt><dd>NVIDIA's whole-system timeline profiler (<code>nsys</code>). Shows CPU threads, CUDA calls, kernels and the gaps between them.</dd></div>
+      <div class="card vocab-card" id="v-nsight-compute" data-cat="kernels"><dt>Nsight Compute</dt><dd>NVIDIA's per-kernel profiler (<code>ncu</code>): achieved bandwidth, occupancy, roofline position.</dd></div>
+    </dl></div>
+
+    <div class="vocab-group"><h2>Production systems</h2><dl class="grid grid-2">
+      <div class="card vocab-card" id="v-inference-engine" data-cat="systems"><dt>Inference engine</dt><dd>Software that serves models efficiently: vLLM, SGLang, TensorRT-LLM, llama.cpp and others.</dd></div>
+      <div class="card vocab-card" id="v-disaggregated-serving" data-cat="systems"><dt>Disaggregated serving</dt><dd>Running prefill and decode on separate GPU pools and moving the KV cache between them. <span class="vx">Separate prep kitchen and plating line.</span></dd></div>
+      <div class="card vocab-card" id="v-kv-aware-routing" data-cat="systems"><dt>KV-aware routing</dt><dd>Sending a request to the replica that already caches its longest prefix, balanced against current load.</dd></div>
+      <div class="card vocab-card" id="v-session-affinity" data-cat="systems"><dt>Session affinity</dt><dd>Routing a conversation's requests to the same replica (e.g. by hashing the session ID) to keep cache hits.</dd></div>
+      <div class="card vocab-card" id="v-autoscaling" data-cat="systems"><dt>Autoscaling</dt><dd>Adding or removing replicas based on load signals such as queue depth, KV usage and latency against SLO.</dd></div>
+      <div class="card vocab-card" id="v-cold-start" data-cat="systems"><dt>Cold start</dt><dd>The time for a new replica to become ready: pull the image, load the weights, compile, capture graphs. Often minutes.</dd></div>
+      <div class="card vocab-card" id="v-openai-compatible-api" data-cat="systems"><dt>OpenAI-compatible API</dt><dd>The de-facto HTTP interface (/v1/chat/completions) that most engines expose, so any OpenAI client works.</dd></div>
+      <div class="card vocab-card" id="v-sse-streaming" data-cat="systems"><dt>SSE streaming</dt><dd>Server-Sent Events: the server pushes each token to the client as soon as it's generated.</dd></div>
+      <div class="card vocab-card" id="v-capacity-planning" data-cat="systems"><dt>Capacity planning</dt><dd>Estimating how many GPUs you need from traffic, token lengths, SLOs and benchmarked per-GPU capacity.</dd></div>
+      <div class="card vocab-card" id="v-load-test-open-loop" data-cat="systems"><dt>Load test (open-loop)</dt><dd>Sending requests at a target arrival rate whether or not earlier ones have finished, like real traffic. It exposes queueing collapse.</dd></div>
+      <div class="card vocab-card" id="v-backpressure" data-cat="systems"><dt>Backpressure</dt><dd>Signalling clients to slow down (HTTP 429/503) instead of queueing work forever.</dd></div>
+      <div class="card vocab-card" id="v-graceful-drain" data-cat="systems"><dt>Graceful drain</dt><dd>On deploy or shutdown: stop admitting new requests, let in-flight streams finish, then restart.</dd></div>
+      <div class="card vocab-card" id="v-multi-lora-serving" data-cat="systems"><dt>Multi-LoRA serving</dt><dd>Serving many small LoRA fine-tune adapters on one shared base model at the same time.</dd></div>
+    </dl></div>
+
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

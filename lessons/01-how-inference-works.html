@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How LLM Inference Works · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Tokens, the autoregressive loop, prefill vs decode, and sampling.">
+  <link rel="alternate" type="text/markdown" href="01-how-inference-works.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "How LLM Inference Works", "description": "Tokens, the autoregressive loop, prefill vs decode, and sampling.", "learningResourceType": "lesson", "educationalLevel": "Foundations", "timeRequired": "PT20M", "teaches": ["Tokenization & logits", "Autoregressive loop", "Prefill vs decode", "Sampling strategies"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/01-how-inference-works.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="how-inference-works">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 1 Foundations / 1-1</div><span class="badge l1">WORLD 1</span><span class="badge">Lesson 1-1</span><span class="badge">~20 min read</span><!--/B:meta--></div>
+      <h1>How LLM Inference Works</h1>
+      <p class="lede">Before we optimize anything, we need a clear picture of what happens between "user sends a prompt" and "tokens stream back". Every later lesson is a trick to make some part of this picture faster.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Trace a prompt through tokenization, the transformer, and sampling</li>
+          <li>Explain the autoregressive loop and why it's sequential</li>
+          <li>Tell apart the <strong>prefill</strong> and <strong>decode</strong> phases and their very different costs</li>
+          <li>Describe the common sampling strategies</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-token">Token</a></dt><dd>The unit an LLM reads and writes: an integer ID from the tokenizer's vocabulary. An English token is about ¾ of a word.</dd></div><div><dt><a href="../vocabulary.html#v-tokenizer">Tokenizer</a></dt><dd>Converts text to token IDs and back (e.g. BPE). Its vocabulary usually has 32k–256k entries.</dd></div><div><dt><a href="../vocabulary.html#v-logits">Logits</a></dt><dd>The model's raw, unnormalized scores, one for every vocabulary token. Softmax turns them into probabilities.</dd></div><div><dt><a href="../vocabulary.html#v-autoregressive-decoding">Autoregressive decoding</a></dt><dd>Generating one token at a time and feeding each new token back in as input for the next step.</dd></div><div><dt><a href="../vocabulary.html#v-prefill">Prefill</a></dt><dd>The first phase of a request: process the whole prompt in parallel, build its KV cache, and produce the first token. Compute-bound.</dd></div><div><dt><a href="../vocabulary.html#v-decode">Decode</a></dt><dd>The phase that produces output tokens one per step. Each step reads all the weights for very little math, so it's memory-bandwidth-bound.</dd></div><div><dt><a href="../vocabulary.html#v-temperature">Temperature</a></dt><dd>Divides logits before softmax. Below 1 makes outputs more focused, above 1 more random, and 0 means greedy.</dd></div><div><dt><a href="../vocabulary.html#v-top-p-nucleus-sampling">Top-p (nucleus) sampling</a></dt><dd>Sample from the smallest set of tokens whose probabilities add up to at least p (e.g. 0.95). The set grows when the model is unsure.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>Inference vs training</h2>
+      <p><strong>Training</strong> adjusts a model's weights with gradient descent over huge datasets. It runs once (or a few times), on big clusters, and is measured in weeks. <strong>Inference</strong> uses the frozen weights to produce outputs for real requests. It runs continuously and is measured in milliseconds per request and dollars per million tokens.</p>
+      <p>Inference has no backward pass, no optimizer state and no gradients. That makes it simpler in one way. But it brings problems training doesn't have: requests arrive at random times, have wildly different lengths, and each user is waiting on a latency target.</p>
+
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Training</th><th>Inference</th></tr></thead>
+        <tbody>
+          <tr><td>Goal</td><td>Learn weights</td><td>Serve outputs fast and cheap</td></tr>
+          <tr><td>Passes</td><td>Forward + backward</td><td>Forward only</td></tr>
+          <tr><td>Batch shape</td><td>Fixed, large, known ahead</td><td>Dynamic, arrives over time</td></tr>
+          <tr><td>Main metric</td><td>Time to converge, MFU</td><td>Latency, throughput, $/token</td></tr>
+          <tr><td>Memory hogs</td><td>Activations, optimizer state</td><td>Weights, <strong>KV cache</strong></td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>From text to tokens and back</h2>
+      <p>An LLM never sees characters. It sees <strong>tokens</strong>, integer IDs from a fixed vocabulary (often 32k–256k entries) produced by a tokenizer such as BPE. As a rule of thumb, one English token is about ¾ of a word.</p>
+      <div class="diagram">
+        <div class="flow">
+          <div class="step">"Hello pixel world"</div><div class="arrow">▶</div>
+          <div class="step">tokenizer</div><div class="arrow">▶</div>
+          <div class="step">[9906, 13438, 1917]</div><div class="arrow">▶</div>
+          <div class="step hot">transformer<br>(N layers)</div><div class="arrow">▶</div>
+          <div class="step">logits<br>[vocab]</div><div class="arrow">▶</div>
+          <div class="step">sample</div><div class="arrow">▶</div>
+          <div class="step">next token</div>
+        </div>
+        <div class="cap">one forward pass = one step of the pipeline above (token IDs are illustrative)</div>
+      </div>
+      <p>Inside the model, each token ID is looked up in an <strong>embedding table</strong> to get a vector of size <code>d_model</code> (4096 for an 8B model). That vector passes through <code>N</code> identical transformer blocks. Each block has <strong>self-attention</strong>, where tokens look at earlier tokens, and an <strong>MLP</strong>, a per-token feed-forward network. At the end, a final projection (the "LM head") turns the last hidden state into one <strong>logit</strong> per vocabulary entry.</p>
+
+      <h2>The autoregressive loop</h2>
+      <p>A decoder-only LLM predicts <em>one</em> next token at a time. To generate a sentence, we append the predicted token to the input and run the model again, over and over. This is <strong>autoregressive generation</strong>:</p>
+<pre><code><span class="c"># the simplest possible generation loop (no KV cache yet!)</span>
+<span class="k">import</span> torch
+<span class="k">from</span> transformers <span class="k">import</span> AutoModelForCausalLM, AutoTokenizer
+
+tok = AutoTokenizer.from_pretrained(<span class="s">"Qwen/Qwen2.5-0.5B"</span>)
+model = AutoModelForCausalLM.from_pretrained(<span class="s">"Qwen/Qwen2.5-0.5B"</span>, torch_dtype=torch.bfloat16).cuda().eval()
+
+ids = tok(<span class="s">"The capital of France is"</span>, return_tensors=<span class="s">"pt"</span>).input_ids.cuda()
+<span class="k">with</span> torch.no_grad():
+    <span class="k">for</span> _ <span class="k">in</span> range(<span class="n">20</span>):
+        logits = model(ids).logits          <span class="c"># [1, seq_len, vocab]: recomputes EVERYTHING each step</span>
+        next_id = logits[:, -<span class="n">1</span>].argmax(-<span class="n">1</span>, keepdim=<span class="k">True</span>)   <span class="c"># greedy pick</span>
+        ids = torch.cat([ids, next_id], dim=<span class="n">1</span>)
+        <span class="k">if</span> next_id.item() == tok.eos_token_id: <span class="k">break</span>
+print(tok.decode(ids[<span class="n">0</span>]))</code></pre>
+      <p>This works, but it's very wasteful. Step <code>t</code> re-processes all <code>t</code> previous tokens, even though their internal states never change. Fixing that waste is the <a href="04-kv-cache.html">KV cache</a> (lesson 2-1).</p>
+      <div class="callout key"><span class="tag">KEY IDEA</span>
+        <p>Generation is <strong>sequential by nature</strong>. Token 51 can't be computed until token 50 is known. You can't parallelize <em>across time</em> within one request, so inference engineers parallelize <em>across requests</em> (batching) and find ways around the rule (speculative decoding).</p>
+      </div>
+
+      <h2>Prefill vs decode</h2>
+      <p>With a KV cache, serving a request splits into two phases that behave very differently on hardware:</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">prefill</span>
+          <span class="blk p"></span><span class="blk p"></span><span class="blk p"></span><span class="blk p"></span><span class="blk p"></span><span class="blk p"></span><span class="blk p"></span><span class="blk p"></span>
+          <span class="blk wide y">→ token 1</span>
+        </div>
+        <div class="blkrow"><span class="lbl">decode 1</span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk b"></span><span class="blk wide y">→ token 2</span></div>
+        <div class="blkrow"><span class="lbl">decode 2</span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk x"></span><span class="blk b"></span><span class="blk wide y">→ token 3</span></div>
+        <div class="cap">pink = processed in parallel · striped = read from KV cache · blue = the one new token</div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Prefill</th><th>Decode</th></tr></thead>
+        <tbody>
+          <tr><td>Input</td><td>The whole prompt (100s–100,000s of tokens) at once</td><td>1 new token per sequence</td></tr>
+          <tr><td>Produces</td><td>KV cache for the prompt + the first output token</td><td>One more token + its KV entry</td></tr>
+          <tr><td>Bottleneck</td><td><strong>Compute</strong>: big matmuls, tensor cores busy</td><td><strong>Memory bandwidth</strong>: reads all weights + KV for a tiny bit of math</td></tr>
+          <tr><td>User-visible metric</td><td>Time To First Token (TTFT)</td><td>Inter-Token Latency (ITL)</td></tr>
+          <tr><td>Runs</td><td>Once per request</td><td>Once per output token</td></tr>
+        </tbody>
+      </table></div>
+      <p>Why is decode memory-bound? Each decode step must stream <em>every weight</em> of the model from GPU memory (16 GB for an 8B model in BF16), only to multiply them by a single token's vector. The math finishes almost instantly, and the GPU spends most of its time waiting on memory. <a href="02-gpu-fundamentals.html">Lesson 1-2</a> makes this exact with the roofline model.</p>
+
+      <h2>Sampling: picking the next token</h2>
+      <p>The model outputs logits, not a token. A <strong>sampler</strong> turns logits into a choice:</p>
+      <ul>
+        <li><strong>Greedy</strong>: always pick <code>argmax</code>. Deterministic, but can be repetitive.</li>
+        <li><strong>Temperature</strong> <code>T</code>: divide logits by <code>T</code> before softmax. <code>T&lt;1</code> sharpens the distribution, <code>T&gt;1</code> flattens it, and <code>T→0</code> is greedy.</li>
+        <li><strong>Top-k</strong>: keep only the k most likely tokens, renormalize, then sample.</li>
+        <li><strong>Top-p (nucleus)</strong>: keep the smallest set of tokens whose probabilities add up to ≥ p.</li>
+        <li><strong>Min-p</strong>: keep tokens with probability ≥ <code>min_p × p_max</code>. This scales with the model's confidence.</li>
+        <li><strong>Penalties</strong>: repetition, frequency and presence penalties change the logits of tokens already generated.</li>
+      </ul>
+<pre><code><span class="k">def</span> sample(logits, temperature=<span class="n">0.8</span>, top_p=<span class="n">0.95</span>):
+    <span class="k">if</span> temperature == <span class="n">0</span>:
+        <span class="k">return</span> logits.argmax(-<span class="n">1</span>)
+    probs = torch.softmax(logits / temperature, dim=-<span class="n">1</span>)
+    sorted_p, idx = probs.sort(descending=<span class="k">True</span>)
+    cum = sorted_p.cumsum(-<span class="n">1</span>)
+    sorted_p[cum - sorted_p &gt; top_p] = <span class="n">0</span>        <span class="c"># drop the tail beyond the nucleus</span>
+    choice = torch.multinomial(sorted_p / sorted_p.sum(), <span class="n">1</span>)
+    <span class="k">return</span> idx.gather(-<span class="n">1</span>, choice)</code></pre>
+      <div class="callout tip"><span class="tag">ENGINEERING NOTE</span>
+        <p>Sampling is cheap in FLOPs, but it's not free in a serving engine. Sorting a 150k-entry vocab for every sequence in a batch of 256, every step, adds up. Engines use fused GPU sampling kernels and avoid copying logits back to the CPU.</p>
+      </div>
+
+      <h2>Where the time goes</h2>
+      <p>For a typical chat request (2,000-token prompt, 300-token answer) on one GPU:</p>
+      <ul>
+        <li>Prefill happens <strong>once</strong> and is fast per token, because tokens are processed in parallel.</li>
+        <li>Decode happens <strong>300 times</strong>, and each step costs about the same as reading the whole model from memory.</li>
+        <li>So end-to-end latency is usually <strong>dominated by decode</strong>, and decode is dominated by memory bandwidth.</li>
+      </ul>
+      <p>That's why so many optimizations in this course target decode: batching (amortize the weight reads), quantization (fewer bytes to read), speculative decoding (more tokens per read), and smaller KV caches (fewer bytes per token).</p>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Why can't we generate all 300 output tokens in one forward pass?</summary>
+        <div class="ans"><p>Each token depends on the ones before it. The model needs token <em>t</em> as input to predict token <em>t+1</em>, so generation is a chain of dependent steps.</p></div></details>
+      <details class="quiz"><summary>Prefill of 2,000 tokens vs decode of 1 token: which uses the GPU's tensor cores more efficiently, and why?</summary>
+        <div class="ans"><p>Prefill. It multiplies the weights by a 2,000-row matrix, so each byte of weight loaded is reused 2,000 times. Decode multiplies by a single row, so each weight byte loaded is used for only ~2 FLOPs. That's far too little work to keep tensor cores busy.</p></div></details>
+      <details class="quiz"><summary>What happens to the output distribution as temperature → 0? As temperature → ∞?</summary>
+        <div class="ans"><p>T → 0 puts all probability on the argmax (greedy). T → ∞ makes the distribution uniform over the vocabulary, so the output is random noise.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer</a> by Jay Alammar</li>
+        <li><a href="https://www.youtube.com/watch?v=kCc8FmEb1nY" target="_blank" rel="noopener">Let's build GPT: from scratch, in code</a> by Andrej Karpathy</li>
+        <li><a href="https://huggingface.co/blog/how-to-generate" target="_blank" rel="noopener">How to generate text: decoding methods</a> on the Hugging Face blog</li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="how-inference-works" data-level="junior">
+<summary><span class="badge l1">junior</span>Walk me through what happens when an LLM serves one request.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Tokenize the prompt. Run <strong>prefill</strong>: one forward pass over all prompt tokens in parallel, which fills the KV cache and produces logits for the first token. Sample a token, stream it back, then loop in <strong>decode</strong>: each step feeds one new token, appends its K/V to the cache, and samples the next, until EOS or max_tokens. Detokenize and stream as you go.</p>
+<h4>What they're testing</h4>
+<p>Whether you know the two phases and that decode is a sequential loop. Mentioning the KV cache unprompted is a good sign.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which phase dominates latency for a 2k-in / 500-out chat request? (Decode: 500 sequential steps.)</li><li>Where does the scheduler fit in?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="how-inference-works" data-level="mid">
+<summary><span class="badge l2">mid</span>Why do prefill and decode stress the GPU so differently?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Prefill multiplies the weights by a matrix of N prompt tokens, so each weight byte loaded is reused N times. Arithmetic intensity is high and it's <strong>compute-bound</strong>. Decode multiplies the weights by one vector per sequence, so it's about 1 FLOP per byte at batch 1 and <strong>memory-bandwidth-bound</strong>. Decode also reads the KV cache, which can't be shared across sequences.</p>
+<h4>What they're testing</h4>
+<p>The roofline intuition, which most of inference optimization rests on.</p>
+<h4>Follow-ups</h4>
+<ul><li>How does batching change decode's position on the roofline?</li><li>What is attention's intensity in decode, and why doesn't batching help it?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="how-inference-works" data-level="junior">
+<summary><span class="badge l1">junior</span>Greedy vs temperature vs top-p sampling: when would you use each?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Greedy (T=0) for deterministic tasks such as extraction, classification and code where you want the most likely answer. Temperature 0.7–1.0 with top-p ≈ 0.9–0.95 for creative or chat output. Top-p adapts the candidate set to the model's confidence, while top-k is a fixed cutoff. Mention that sampling has a cost in serving (sorting large vocabularies per sequence), so engines use fused GPU samplers.</p>
+<h4>What they're testing</h4>
+<p>Basic decoding knowledge plus some awareness of the systems side.</p>
+<h4>Follow-ups</h4>
+<ul><li>Why can T=0 still be non-deterministic in a batched server?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 1-1 "How LLM Inference Works" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="01-how-inference-works.md">01-how-inference-works.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><span></span><a class="card next" href="../lessons/02-gpu-fundamentals.html"><span class="dir">next · 1-2 ▶</span><span class="t">GPU Fundamentals &amp; the Roofline</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

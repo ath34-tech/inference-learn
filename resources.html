@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resources · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Curated papers, blogs, videos, courses and open-source engines.">
+  <link rel="alternate" type="text/markdown" href="resources.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Resources", "description": "Curated papers, blogs, videos, courses and open-source engines.", "url": "resources.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="resources">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// item shop</span>
+    <h1>Resources</h1>
+    <p>Hand-picked papers, blog posts, videos, courses and open-source projects, grouped by topic. If you're new, start with the first group.</p>
+  </section>
+
+  <section class="container" style="padding-top:24px">
+    <div class="filters" id="res-filters">
+      <button class="chip on" data-f="all">All</button>
+      <button class="chip" data-f="paper">Papers</button>
+      <button class="chip" data-f="blog">Blogs</button>
+      <button class="chip" data-f="video">Videos</button>
+      <button class="chip" data-f="course">Courses &amp; books</button>
+      <button class="chip" data-f="repo">Repos &amp; tools</button>
+    </div>
+
+    <!-- START HERE -->
+    <div class="res-group">
+      <h2>★ Start here</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://lilianweng.github.io/posts/2023-01-10-inference-optimization/" target="_blank" rel="noopener">Large Transformer Model Inference Optimization</a></h3>
+          <div class="by">Lilian Weng · 2023</div><p>A broad survey of the techniques: distillation, quantization, pruning, sparsity, efficient attention.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://kipp.ly/transformer-inference-arithmetic/" target="_blank" rel="noopener">Transformer Inference Arithmetic</a></h3>
+          <div class="by">kipply · 2022</div><p>The classic napkin-math walkthrough of KV cache, FLOPs, memory and latency.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://horace.io/brrr_intro.html" target="_blank" rel="noopener">Making Deep Learning Go Brrrr From First Principles</a></h3>
+          <div class="by">Horace He · 2022</div><p>Compute vs memory vs overhead: the three regimes every kernel lives in.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">book</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://jax-ml.github.io/scaling-book/" target="_blank" rel="noopener">How to Scale Your Model</a></h3>
+          <div class="by">Google DeepMind · 2025</div><p>A free online book on rooflines, sharding and transformer inference on TPUs and GPUs.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization/" target="_blank" rel="noopener">Mastering LLM Techniques: Inference Optimization</a></h3>
+          <div class="by">NVIDIA Technical Blog</div><p>Batching, KV cache, parallelism, quantization and speculative decoding in one overview.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://www.databricks.com/blog/llm-inference-performance-engineering-best-practices" target="_blank" rel="noopener">LLM Inference Performance Engineering: Best Practices</a></h3>
+          <div class="by">Databricks · 2023</div><p>Metrics, MBU, batching and hardware choices, written by practitioners.</p></div>
+      </div>
+    </div>
+
+    <!-- FOUNDATIONS -->
+    <div class="res-group">
+      <h2>Foundations</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Attention Is All You Need</a></h3>
+          <div class="by">Vaswani et al. · 2017</div><p>The transformer paper. Read it once and you'll recognize every block.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">The Illustrated Transformer</a></h3>
+          <div class="by">Jay Alammar</div><p>The best visual introduction to attention, Q/K/V and multi-head attention.</p></div>
+        <div class="card res" data-type="video"><div><span class="badge pink">video</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://www.youtube.com/watch?v=kCc8FmEb1nY" target="_blank" rel="noopener">Let's build GPT: from scratch, in code, spelled out</a></h3>
+          <div class="by">Andrej Karpathy</div><p>Build a decoder-only transformer line by line. The best possible prerequisite.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://github.com/karpathy/nanoGPT" target="_blank" rel="noopener">nanoGPT</a></h3>
+          <div class="by">Andrej Karpathy</div><p>A tiny, readable GPT implementation to hack your first inference experiments on.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2211.05102" target="_blank" rel="noopener">Efficiently Scaling Transformer Inference</a></h3>
+          <div class="by">Pope et al. (Google) · 2022</div><p>Partitioning strategies, latency/cost trade-offs and MQA at scale. Foundational.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://huggingface.co/blog/how-to-generate" target="_blank" rel="noopener">How to generate text: decoding methods</a></h3>
+          <div class="by">Hugging Face</div><p>Greedy, beam search, top-k and top-p sampling explained with examples.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2402.16363" target="_blank" rel="noopener">LLM Inference Unveiled: Survey and Roofline Model Insights</a></h3>
+          <div class="by">Yuan et al. · 2024</div><p>A survey that analyzes inference techniques through the roofline model.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2404.14294" target="_blank" rel="noopener">A Survey on Efficient Inference for Large Language Models</a></h3>
+          <div class="by">Zhou et al. · 2024</div><p>A taxonomy of data-, model- and system-level optimizations.</p></div>
+      </div>
+    </div>
+
+    <!-- KV & ATTENTION -->
+    <div class="res-group">
+      <h2>KV cache &amp; attention</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">FlashAttention</a></h3>
+          <div class="by">Dao et al. · 2022</div><p>IO-aware exact attention with tiling and online softmax.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2307.08691" target="_blank" rel="noopener">FlashAttention-2</a></h3>
+          <div class="by">Tri Dao · 2023</div><p>Better parallelism and work partitioning for about 2× more speed.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2407.08608" target="_blank" rel="noopener">FlashAttention-3</a></h3>
+          <div class="by">Shah et al. · 2024</div><p>Hopper-specific: asynchrony, warp specialization and FP8.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener">Efficient Memory Management for LLM Serving with PagedAttention</a></h3>
+          <div class="by">Kwon et al. (vLLM) · SOSP 2023</div><p>Paged KV cache, near-zero fragmentation and copy-on-write sharing.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://blog.vllm.ai/2023/06/20/vllm.html" target="_blank" rel="noopener">vLLM: Easy, Fast, and Cheap LLM Serving with PagedAttention</a></h3>
+          <div class="by">vLLM team · 2023</div><p>A friendly, illustrated introduction to PagedAttention.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://crfm.stanford.edu/2023/10/12/flashdecoding.html" target="_blank" rel="noopener">Flash-Decoding for long-context inference</a></h3>
+          <div class="by">Dao, Haziza, Massa, Sizov · 2023</div><p>Split-KV parallelism for fast decode attention at long context.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Fast Transformer Decoding: One Write-Head is All You Need</a></h3>
+          <div class="by">Noam Shazeer · 2019</div><p>Introduces multi-query attention (MQA).</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA: Training Generalized Multi-Query Transformer Models</a></h3>
+          <div class="by">Ainslie et al. · 2023</div><p>Grouped-query attention, today's default KV-head layout.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-V2</a></h3>
+          <div class="by">DeepSeek-AI · 2024</div><p>Introduces multi-head latent attention (MLA) and a very compact KV cache.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">Efficient Streaming Language Models with Attention Sinks</a></h3>
+          <div class="by">Xiao et al. · 2023</div><p>StreamingLLM: keep sink tokens and a window to stream indefinitely.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://github.com/flashinfer-ai/flashinfer" target="_blank" rel="noopener">FlashInfer</a></h3>
+          <div class="by">flashinfer-ai</div><p>A kernel library for LLM serving: paged and ragged attention, sampling and more.</p></div>
+      </div>
+    </div>
+
+    <!-- BATCHING & SCHEDULING -->
+    <div class="res-group">
+      <h2>Batching, scheduling &amp; serving systems</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener">Orca: A Distributed Serving System for Transformer-Based Generative Models</a></h3>
+          <div class="by">Yu et al. · OSDI 2022</div><p>Iteration-level scheduling, the origin of continuous batching.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://www.anyscale.com/blog/continuous-batching-llm-inference" target="_blank" rel="noopener">How continuous batching enables 23× throughput</a></h3>
+          <div class="by">Anyscale · 2023</div><p>A clear explanation with benchmarks of static vs continuous batching.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2403.02310" target="_blank" rel="noopener">Sarathi-Serve: Taming Throughput-Latency Tradeoff</a></h3>
+          <div class="by">Agrawal et al. · OSDI 2024</div><p>Chunked prefill and stall-free batching.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2401.09670" target="_blank" rel="noopener">DistServe</a></h3>
+          <div class="by">Zhong et al. · OSDI 2024</div><p>Prefill/decode disaggregation, optimized for goodput.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2311.18677" target="_blank" rel="noopener">Splitwise</a></h3>
+          <div class="by">Patel et al. · ISCA 2024</div><p>Phase splitting across machines, including different hardware per phase.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2407.00079" target="_blank" rel="noopener">Mooncake: A KVCache-centric Disaggregated Architecture</a></h3>
+          <div class="by">Moonshot AI · 2024</div><p>Large-scale disaggregated serving built around a distributed KV store.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2312.07104" target="_blank" rel="noopener">SGLang: Efficient Execution of Structured LM Programs</a></h3>
+          <div class="by">Zheng et al. · 2023</div><p>RadixAttention prefix caching and fast constrained decoding.</p></div>
+      </div>
+    </div>
+
+    <!-- QUANTIZATION -->
+    <div class="res-group">
+      <h2>Quantization</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://newsletter.maartengrootendorst.com/p/a-visual-guide-to-quantization" target="_blank" rel="noopener">A Visual Guide to Quantization</a></h3>
+          <div class="by">Maarten Grootendorst · 2024</div><p>An illustrated tour from number formats to GPTQ, AWQ and GGUF.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2208.07339" target="_blank" rel="noopener">LLM.int8()</a></h3>
+          <div class="by">Dettmers et al. · 2022</div><p>Finds emergent activation outliers. Mixed-precision INT8 matmul.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2211.10438" target="_blank" rel="noopener">SmoothQuant</a></h3>
+          <div class="by">Xiao et al. · 2022</div><p>Moves quantization difficulty from activations to weights to enable W8A8.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2210.17323" target="_blank" rel="noopener">GPTQ</a></h3>
+          <div class="by">Frantar et al. · 2022</div><p>Second-order, error-compensating post-training weight quantization.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2306.00978" target="_blank" rel="noopener">AWQ: Activation-aware Weight Quantization</a></h3>
+          <div class="by">Lin et al. · MLSys 2024</div><p>Protects salient channels with scaling. Simple and effective INT4.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2209.05433" target="_blank" rel="noopener">FP8 Formats for Deep Learning</a></h3>
+          <div class="by">Micikevicius et al. · 2022</div><p>Defines the E4M3 and E5M2 formats used by modern GPUs.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">docs</span><span class="badge l1">beginner</span></div>
+          <h3><a href="https://huggingface.co/docs/transformers/main/en/quantization/overview" target="_blank" rel="noopener">Hugging Face: Quantization overview</a></h3>
+          <div class="by">Hugging Face docs</div><p>A practical comparison of quantization backends and how to use them.</p></div>
+      </div>
+    </div>
+
+    <!-- SPECULATIVE -->
+    <div class="res-group">
+      <h2>Speculative decoding</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2211.17192" target="_blank" rel="noopener">Fast Inference from Transformers via Speculative Decoding</a></h3>
+          <div class="by">Leviathan, Kalman, Matias · ICML 2023</div><p>The draft-and-verify idea with a lossless acceptance rule.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2302.01318" target="_blank" rel="noopener">Accelerating LLM Decoding with Speculative Sampling</a></h3>
+          <div class="by">Chen et al. (DeepMind) · 2023</div><p>Concurrent discovery, with results at Chinchilla scale.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2401.10774" target="_blank" rel="noopener">Medusa</a></h3>
+          <div class="by">Cai et al. · 2024</div><p>Multiple decoding heads plus tree attention. No separate draft model.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2401.15077" target="_blank" rel="noopener">EAGLE</a></h3>
+          <div class="by">Li et al. · 2024</div><p>Feature-level drafting with high acceptance rates. Followed by EAGLE-2 and EAGLE-3.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2412.19437" target="_blank" rel="noopener">DeepSeek-V3 Technical Report</a></h3>
+          <div class="by">DeepSeek-AI · 2024</div><p>Multi-token prediction (usable for speculation), FP8 and large-scale MoE deployment.</p></div>
+      </div>
+    </div>
+
+    <!-- PARALLELISM -->
+    <div class="res-group">
+      <h2>Parallelism &amp; MoE</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/1909.08053" target="_blank" rel="noopener">Megatron-LM</a></h3>
+          <div class="by">Shoeybi et al. · 2019</div><p>The tensor-parallel layer-splitting scheme used everywhere.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2101.03961" target="_blank" rel="noopener">Switch Transformers</a></h3>
+          <div class="by">Fedus, Zoph, Shazeer · 2021</div><p>Simple top-1 routing MoE at trillion-parameter scale.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://arxiv.org/abs/2401.04088" target="_blank" rel="noopener">Mixtral of Experts</a></h3>
+          <div class="by">Mistral AI · 2024</div><p>A widely used open sparse MoE: 8 experts, top-2 routing.</p></div>
+        <div class="card res" data-type="paper"><div><span class="badge pink">paper</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://arxiv.org/abs/2310.01889" target="_blank" rel="noopener">Ring Attention with Blockwise Transformers</a></h3>
+          <div class="by">Liu, Zaharia, Abbeel · 2023</div><p>Context parallelism for near-infinite sequence lengths.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://github.com/deepseek-ai/DeepEP" target="_blank" rel="noopener">DeepEP</a></h3>
+          <div class="by">DeepSeek-AI</div><p>High-performance all-to-all kernels for expert parallelism.</p></div>
+      </div>
+    </div>
+
+    <!-- KERNELS -->
+    <div class="res-group">
+      <h2>GPU programming &amp; kernels</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="course"><div><span class="badge pink">docs</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/" target="_blank" rel="noopener">CUDA C++ Programming Guide</a></h3>
+          <div class="by">NVIDIA</div><p>The official reference for the CUDA programming and memory model.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">tutorial</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://triton-lang.org/main/getting-started/tutorials/index.html" target="_blank" rel="noopener">Triton tutorials</a></h3>
+          <div class="by">OpenAI / Triton</div><p>From vector add to fused softmax, matmul and FlashAttention in Triton.</p></div>
+        <div class="card res" data-type="video"><div><span class="badge pink">video</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://www.youtube.com/@GPUMODE" target="_blank" rel="noopener">GPU MODE lectures (YouTube)</a></h3>
+          <div class="by">GPU MODE community</div><p>Weekly talks on CUDA, Triton, profiling, quantization kernels and more.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://github.com/gpu-mode/lectures" target="_blank" rel="noopener">GPU MODE lecture materials</a></h3>
+          <div class="by">GPU MODE</div><p>Slides and code that go with the lecture series.</p></div>
+        <div class="card res" data-type="blog"><div><span class="badge pink">blog</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://pytorch.org/blog/accelerating-generative-ai-2/" target="_blank" rel="noopener">Accelerating Generative AI with PyTorch II: GPT, Fast</a></h3>
+          <div class="by">PyTorch team · 2023</div><p>torch.compile, INT8/INT4, speculative decoding and TP in under 1,000 lines.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://github.com/pytorch-labs/gpt-fast" target="_blank" rel="noopener">gpt-fast</a></h3>
+          <div class="by">PyTorch Labs</div><p>The code from the blog above. Small, fast and very readable.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">advanced</span></div>
+          <h3><a href="https://github.com/NVIDIA/cutlass" target="_blank" rel="noopener">CUTLASS / CuTe</a></h3>
+          <div class="by">NVIDIA</div><p>CUDA templates for high-performance GEMM and attention kernels.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">book</span><span class="badge l2">intermediate</span></div>
+          <h3>Programming Massively Parallel Processors (4th ed.)</h3>
+          <div class="by">Hwu, Kirk, El Hajj · 2022</div><p>The standard textbook on CUDA and parallel algorithms. Pairs well with GPU MODE.</p></div>
+      </div>
+    </div>
+
+    <!-- ENGINES -->
+    <div class="res-group">
+      <h2>Inference engines &amp; tools</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener">vLLM</a></h3>
+          <div class="by">vLLM project</div><p>High-throughput serving engine with PagedAttention and broad model and hardware support.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/sgl-project/sglang" target="_blank" rel="noopener">SGLang</a></h3>
+          <div class="by">SGLang project</div><p>Fast serving with RadixAttention, structured output and large-scale MoE support.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/NVIDIA/TensorRT-LLM" target="_blank" rel="noopener">TensorRT-LLM</a></h3>
+          <div class="by">NVIDIA</div><p>NVIDIA's optimized LLM inference library: FP8/FP4, in-flight batching and more.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">llama.cpp</a></h3>
+          <div class="by">ggml-org</div><p>C/C++ inference on CPUs, Apple Silicon and GPUs. The home of GGUF.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/ollama/ollama" target="_blank" rel="noopener">Ollama</a></h3>
+          <div class="by">Ollama</div><p>The easiest way to run models locally. Great for experiments.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/huggingface/text-generation-inference" target="_blank" rel="noopener">Text Generation Inference</a></h3>
+          <div class="by">Hugging Face</div><p>Hugging Face's production serving toolkit.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/InternLM/lmdeploy" target="_blank" rel="noopener">LMDeploy</a></h3>
+          <div class="by">InternLM</div><p>A toolkit for compressing, deploying and serving LLMs (TurboMind engine).</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l1">engine</span></div>
+          <h3><a href="https://github.com/mlc-ai/mlc-llm" target="_blank" rel="noopener">MLC LLM</a></h3>
+          <div class="by">MLC AI</div><p>A compiler-based engine for phones, browsers (WebGPU) and diverse GPUs.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">platform</span></div>
+          <h3><a href="https://github.com/ai-dynamo/dynamo" target="_blank" rel="noopener">NVIDIA Dynamo</a></h3>
+          <div class="by">NVIDIA</div><p>Distributed inference framework: disaggregated serving and a KV-aware router.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">platform</span></div>
+          <h3><a href="https://github.com/llm-d/llm-d" target="_blank" rel="noopener">llm-d</a></h3>
+          <div class="by">llm-d project</div><p>Kubernetes-native distributed inference with smart routing and disaggregation.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l3">platform</span></div>
+          <h3><a href="https://github.com/LMCache/LMCache" target="_blank" rel="noopener">LMCache</a></h3>
+          <div class="by">LMCache</div><p>A KV cache layer for storing and reusing KV across GPU, CPU and disk.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l2">learn</span></div>
+          <h3><a href="https://github.com/GeeeekExplorer/nano-vllm" target="_blank" rel="noopener">nano-vllm</a></h3>
+          <div class="by">GeeeekExplorer</div><p>A small vLLM-style engine you can read in an afternoon. Ideal for the capstone.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l2">tool</span></div>
+          <h3><a href="https://github.com/vllm-project/guidellm" target="_blank" rel="noopener">GuideLLM</a></h3>
+          <div class="by">vLLM project</div><p>Load testing and SLO-oriented benchmarking for LLM servers.</p></div>
+        <div class="card res" data-type="repo"><div><span class="badge pink">repo</span><span class="badge l2">tool</span></div>
+          <h3><a href="https://github.com/triton-inference-server/server" target="_blank" rel="noopener">Triton Inference Server</a></h3>
+          <div class="by">NVIDIA</div><p>A general model server with dynamic batching and multi-framework backends.</p></div>
+      </div>
+    </div>
+
+    <!-- COURSES & BOOKS -->
+    <div class="res-group">
+      <h2>Courses &amp; books</h2>
+      <div class="grid grid-3">
+        <div class="card res" data-type="course"><div><span class="badge pink">book</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://github.com/stas00/ml-engineering" target="_blank" rel="noopener">Machine Learning Engineering Open Book</a></h3>
+          <div class="by">Stas Bekman</div><p>Hardware, networking, debugging and inference: lessons from training and serving at scale.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">course</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://stanford-cs336.github.io/spring2025/" target="_blank" rel="noopener">Stanford CS336: Language Modeling from Scratch</a></h3>
+          <div class="by">Stanford · 2025</div><p>Build an LLM end to end, including GPU kernels, parallelism and an inference lecture.</p></div>
+        <div class="card res" data-type="course"><div><span class="badge pink">course</span><span class="badge l2">intermediate</span></div>
+          <h3><a href="https://hanlab.mit.edu/courses/2024-fall-65940" target="_blank" rel="noopener">MIT 6.5940: TinyML and Efficient Deep Learning</a></h3>
+          <div class="by">Song Han, MIT</div><p>Quantization, pruning, distillation and efficient LLM deployment.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InferenceLearn: Learn Inference Engineering</title>
+  <meta name="description" content="A free, pixel-styled course on LLM inference engineering, from first principles to production. Roadmap, lessons, resources.">
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <link rel="alternate" type="text/markdown" href="index.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Home", "description": "Overview of the course and what inference engineering is.", "url": "index.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="home">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container hero-inner">
+      <div>
+        <div class="terminal-line">&gt; loading inference.exe <span class="cursor"></span></div>
+        <h1>Learn <span class="hl">Inference Engineering</span>, one pixel at a time.</h1>
+        <p class="lead">A free, structured path from <em>"how does a model produce a token?"</em> to running LLMs fast and cheap in production. You'll cover KV caches, batching, FlashAttention, quantization, speculative decoding, parallelism and more.</p>
+        <div style="margin:28px 0 8px">
+          <a class="btn" href="roadmap.html">View the roadmap ▶</a>
+          <a class="btn alt" data-continue href="lessons/01-how-inference-works.html">Start lesson 1-1</a>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <span class="sparkle" style="top:24px;left:30px" data-art="star" data-scale="5"></span>
+        <span class="sparkle" style="bottom:40px;right:36px;animation-delay:.8s" data-art="star" data-scale="4"></span>
+        <span class="sparkle" style="top:60px;right:60px;animation-delay:.4s" data-art="heart" data-scale="4"></span>
+        <div class="center">
+          <div class="speech">tokens go brrr!</div>
+          <div class="bob" data-art="chip" data-scale="12"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT IS IT -->
+  <section class="section" style="padding-top:20px">
+    <div class="container">
+      <div class="card" style="box-shadow:8px 8px 0 var(--pink)">
+        <div class="grid grid-2" style="align-items:center">
+          <div>
+            <span class="kicker">// what is inference engineering?</span>
+            <h2 style="margin-top:10px">Training builds the model. Inference is where you pay for it.</h2>
+          </div>
+          <div>
+            <p>Inference engineering is the craft of <strong>serving trained models</strong> to users with low latency, high throughput and low cost. A lab trains a model once, then runs inference on it billions of times. Small gains add up: a 2× faster engine can halve a GPU bill.</p>
+            <p style="margin:0">It sits where ML, GPU architecture and distributed systems meet. You need to know what a transformer computes, where the bytes move on the hardware, and how to schedule thousands of requests at once.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="section" style="padding-top:0">
+    <div class="container">
+      <div class="stats">
+        <div class="card stat"><span class="num">4</span><span class="lbl">worlds, basic → expert</span></div>
+        <div class="card stat"><span class="num">13</span><span class="lbl">in-depth lessons</span></div>
+        <div class="card stat"><span class="num">6</span><span class="lbl">interactive labs</span></div>
+        <div class="card stat"><span class="num">60+</span><span class="lbl">curated resources</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JOURNEY -->
+  <section class="section" style="padding-top:20px">
+    <div class="container">
+      <div class="section-title">
+        <span class="kicker">// the journey</span>
+        <h2>Four worlds to clear</h2>
+        <p>Each world builds on the last. Go in order if you're new, or jump straight to a topic.</p>
+      </div>
+      <div class="grid grid-4">
+        <a class="card" href="learn.html#w1">
+          <span class="badge l1">World 1</span>
+          <h3>Foundations</h3>
+          <p class="muted" style="font-size:13.5px">Prefill vs decode, GPU memory hierarchy, roofline math, and the metrics that matter.</p>
+        </a>
+        <a class="card" href="learn.html#w2">
+          <span class="badge l2">World 2</span>
+          <h3>Core Techniques</h3>
+          <p class="muted" style="font-size:13.5px">KV cache, continuous batching, FlashAttention, PagedAttention, quantization.</p>
+        </a>
+        <a class="card" href="learn.html#w3">
+          <span class="badge l3">World 3</span>
+          <h3>Advanced</h3>
+          <p class="muted" style="font-size:13.5px">Speculative decoding, tensor/expert parallelism, prefix caching, disaggregated serving.</p>
+        </a>
+        <a class="card" href="learn.html#w4">
+          <span class="badge l4">World 4</span>
+          <h3>Expert / Systems</h3>
+          <p class="muted" style="font-size:13.5px">Kernel fusion, CUDA graphs, Triton, profiling, and production operations.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section class="section" style="padding-top:20px">
+    <div class="container">
+      <div class="grid grid-2" style="align-items:center">
+        <div>
+          <span class="kicker">// your save file</span>
+          <h2 style="margin-top:10px">Track your progress</h2>
+          <p>Mark lessons as cleared and the site remembers them in your browser. Nothing leaves your machine: no account, no tracking.</p>
+          <a class="btn small" data-continue href="lessons/01-how-inference-works.html">Start lesson 1-1</a>
+        </div>
+        <div class="card"><div data-progress></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section" style="padding-top:20px">
+    <div class="container">
+      <div class="section-title">
+        <span class="kicker">// inventory</span>
+        <h2>What's inside</h2>
+      </div>
+      <div class="grid grid-4">
+        <a class="card" href="roadmap.html">
+          <span data-art="star" data-scale="5"></span>
+          <h3 style="margin-top:12px">Roadmap</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">A visual path from prerequisites to capstone projects.</p>
+        </a>
+        <a class="card" href="learn.html">
+          <span data-art="chip" data-scale="2"></span>
+          <h3 style="margin-top:12px">Lessons</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">Written explanations with diagrams, formulas, code, calculators and quizzes.</p>
+        </a>
+        <a class="card" href="resources.html">
+          <span data-art="heart" data-scale="4"></span>
+          <h3 style="margin-top:12px">Resources</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">Key papers, blogs, videos, books and open-source engines.</p>
+        </a>
+        <a class="card" href="vocabulary.html">
+          <span data-art="star" data-scale="5"></span>
+          <h3 style="margin-top:12px">Vocabulary</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">129 terms in plain English with analogies, plus flashcards to drill them.</p>
+        </a>
+        <a class="card" href="practice.html">
+          <span data-art="trophy" data-scale="4"></span>
+          <h3 style="margin-top:12px">Quiz Arcade</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">45 questions, 3 lives, streak bonuses and a hi-score. Every answer is explained.</p>
+        </a>
+        <a class="card" href="interview.html">
+          <span data-art="heart" data-scale="4"></span>
+          <h3 style="margin-top:12px">Interview Prep</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">39 questions with model answers, what interviewers test, and system-design prompts.</p>
+        </a>
+        <a class="card" href="workbook.html">
+          <span data-art="chip" data-scale="2"></span>
+          <h3 style="margin-top:12px">Workbook</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">14 napkin-math problems with worked solutions, explain-it-back prompts and experiments.</p>
+        </a>
+        <a class="card" href="lessons/04-kv-cache.html#kv-calc">
+          <span data-art="star" data-scale="5"></span>
+          <h3 style="margin-top:12px">6 Interactive labs</h3>
+          <p class="muted" style="font-size:13.5px;margin:0">KV memory map, roofline, batching race, quantization playground, speculative dice, cost builder.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI TUTOR -->
+  <section class="section" style="padding-top:20px">
+    <div class="container">
+      <div class="card" style="box-shadow:8px 8px 0 var(--mint)">
+        <div class="grid grid-2" style="align-items:center">
+          <div>
+            <span class="kicker">// co-op mode</span>
+            <h2 style="margin-top:10px">Learn with your own AI tutor</h2>
+            <p>Every page is written to be easy for AI assistants to read. Paste any page's link into <strong>ChatGPT, Claude or Gemini</strong> and ask it to teach you, quiz you, or interview you. Each lesson has a ready-made tutor prompt at the bottom.</p>
+          </div>
+          <div>
+            <ul style="padding-left:1.2em;font-size:14px">
+              <li><a href="llms.txt">llms.txt</a>: an index of the whole site for AI assistants</li>
+              <li><a href="llms-full.txt">llms-full.txt</a>: the entire course as one plain-text file</li>
+              <li>Every page has a <code>.md</code> twin, e.g. <a href="lessons/04-kv-cache.md">lessons/04-kv-cache.md</a></li>
+              <li>Try: <em>"Read [link] and teach me this lesson step by step, quizzing me as we go."</em></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

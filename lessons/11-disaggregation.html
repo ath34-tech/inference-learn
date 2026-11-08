@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduling &amp; Disaggregated Serving · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Schedulers, prefill/decode disaggregation, routing and autoscaling.">
+  <link rel="alternate" type="text/markdown" href="11-disaggregation.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Scheduling & Disaggregated Serving", "description": "Schedulers, prefill/decode disaggregation, routing and autoscaling.", "learningResourceType": "lesson", "educationalLevel": "Advanced", "timeRequired": "PT30M", "teaches": ["Scheduler policies", "P/D disaggregation", "KV-aware routing", "Autoscaling"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/11-disaggregation.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="disaggregation">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 3 Advanced / 3-4</div><span class="badge l3">WORLD 3</span><span class="badge">Lesson 3-4</span><span class="badge">~30 min read</span><!--/B:meta--></div>
+      <h1>Scheduling &amp; Disaggregated Serving</h1>
+      <p class="lede">Past a single engine, performance depends on <em>where</em> and <em>when</em> work runs: which requests to admit, which replica serves them, and whether prefill and decode should share GPUs at all.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Compare scheduling policies and admission control</li>
+          <li>Explain prefill/decode disaggregation and when it pays off</li>
+          <li>Design KV- and prefix-aware request routing</li>
+          <li>Pick the right signals for autoscaling LLM servers</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-admission-control">Admission control</a></dt><dd>Deciding whether to accept, queue or reject new requests, so the system doesn't overload and collapse.</dd></div><div><dt><a href="../vocabulary.html#v-disaggregated-serving">Disaggregated serving</a></dt><dd>Running prefill and decode on separate GPU pools and moving the KV cache between them.</dd></div><div><dt><a href="../vocabulary.html#v-kv-aware-routing">KV-aware routing</a></dt><dd>Sending a request to the replica that already caches its longest prefix, balanced against current load.</dd></div><div><dt><a href="../vocabulary.html#v-session-affinity">Session affinity</a></dt><dd>Routing a conversation's requests to the same replica (e.g. by hashing the session ID) to keep cache hits.</dd></div><div><dt><a href="../vocabulary.html#v-autoscaling">Autoscaling</a></dt><dd>Adding or removing replicas based on load signals such as queue depth, KV usage and latency against SLO.</dd></div><div><dt><a href="../vocabulary.html#v-cold-start">Cold start</a></dt><dd>The time for a new replica to become ready: pull the image, load the weights, compile, capture graphs. Often minutes.</dd></div><div><dt><a href="../vocabulary.html#v-goodput">Goodput</a></dt><dd>Throughput counting only requests that met their latency SLOs.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>Scheduling inside an engine</h2>
+      <p>Each step, the scheduler decides which waiting requests to admit and how to fill the token budget. Common policies:</p>
+      <ul>
+        <li><strong>FCFS (first come, first served)</strong>: simple and fair in arrival order. The default in most engines.</li>
+        <li><strong>Priority</strong>: interactive traffic goes ahead of batch jobs. Low-priority work can be preempted.</li>
+        <li><strong>Shortest-job-first</strong> (using a predicted output length): lowers average latency, but long requests risk starvation.</li>
+        <li><strong>Fairness across tenants</strong>: stops one heavy customer from monopolizing the batch, e.g. with token-based fair queueing.</li>
+        <li><strong>Cache-aware</strong>: run requests that share a cached prefix close together in time, before the prefix gets evicted.</li>
+      </ul>
+      <p><strong>Admission control</strong> matters as much as ordering. Accepting more work than the KV cache can hold leads to preemption storms and latency collapse. It's better to queue, or return HTTP 429, early.</p>
+
+      <h2>Why disaggregate prefill &amp; decode?</h2>
+      <p>Prefill is compute-bound and bursty. Decode is memory-bound and steady. On the same GPU they interfere: prefills stall decodes (ITL spikes), and decodes slow prefills down (TTFT spikes). Chunked prefill reduces this but doesn't remove it. Both phases also share the <em>same</em> parallelism config and batch size, even though their ideal settings differ.</p>
+      <p><strong>Disaggregated serving</strong> (DistServe, Splitwise, Mooncake) runs them on <strong>separate GPU pools</strong>:</p>
+      <div class="diagram">
+        <div class="flow">
+          <div class="step">request</div><div class="arrow">▶</div>
+          <div class="step hot">PREFILL pool<br>compute-optimized<br>(e.g. higher TP)</div><div class="arrow">KV ▶</div>
+          <div class="step" style="background:var(--sky);color:#0e2a40">DECODE pool<br>memory-optimized<br>(big batches)</div><div class="arrow">▶</div>
+          <div class="step">token stream</div>
+        </div>
+        <div class="cap">the KV cache produced by prefill is transferred to a decode worker over NVLink / RDMA</div>
+      </div>
+      <ul>
+        <li><strong>No interference</strong>: TTFT and ITL can be tuned independently to meet their own SLOs.</li>
+        <li><strong>Independent scaling</strong>: prompt-heavy workloads such as RAG add prefill GPUs. Long-generation workloads add decode GPUs.</li>
+        <li><strong>Different configs</strong>: e.g. more parallelism for prefill and larger batches for decode. Splitwise even explored different GPU types per phase.</li>
+        <li><strong>Costs</strong>: moving KV takes bandwidth. A 2k-token prompt on Llama-3-70B is ~640 MB of KV. Over 50 GB/s RDMA that's ~13 ms, acceptable but not free. It adds complexity and new failure modes.</li>
+      </ul>
+      <div class="callout tip"><span class="tag">WHEN TO USE</span>
+        <p>Disaggregation pays off at <strong>scale</strong>, with <strong>strict, separate TTFT and ITL SLOs</strong>, long prompts, and fast interconnects. For a few GPUs or loose SLOs, a single pool with chunked prefill is simpler and often just as good. Measure goodput both ways.</p>
+      </div>
+
+      <h2>Request routing</h2>
+      <p>With many replicas, the load balancer is part of the inference system. Round-robin HTTP balancing ignores everything that matters:</p>
+      <ul>
+        <li><strong>Load-aware</strong>: route on queue depth, running sequences or KV utilization, not open connection count.</li>
+        <li><strong>Prefix / KV-aware</strong>: send a request to the replica that already caches the longest matching prefix, such as the same conversation. This can raise hit rates a lot.</li>
+        <li><strong>Balance the two</strong>: always routing to the best cache hit creates hotspots. Practical routers score <em>cache overlap minus load</em>.</li>
+        <li><strong>Session affinity</strong>: a cheap approximation that hashes on conversation or user ID.</li>
+      </ul>
+      <p>Open-source projects in this space include <strong>NVIDIA Dynamo</strong> (disaggregation plus a KV-aware router), <strong>llm-d</strong> (Kubernetes-native distributed inference) and SGLang's router.</p>
+
+      <h2>Autoscaling</h2>
+      <ul>
+        <li><strong>Good signals</strong>: queue length or waiting requests, KV cache utilization, TTFT/ITL p90 against the SLO, tokens/s against measured capacity.</li>
+        <li><strong>Bad signals</strong>: CPU utilization (meaningless for GPU work), and raw GPU "utilization" from <code>nvidia-smi</code>. That number only says a kernel was running, not how much work it did.</li>
+        <li><strong>Cold starts are slow</strong>: pulling a container plus loading 100+ GB of weights plus compiling and capturing CUDA graphs can take minutes. Mitigations: keep warm spares, cache weights on local NVMe, stream weights quickly, and scale ahead of known traffic patterns.</li>
+        <li><strong>Scale to zero</strong> saves money for rarely used models but forces cold starts. Multi-LoRA serving (many adapters on one base model) is often a better fit for the long tail.</li>
+      </ul>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Name two ways prefill and decode interfere when they share a GPU.</summary>
+        <div class="ans"><p>(1) A long prefill in a step delays every running decode, which spikes ITL. (2) Many decodes in a step share compute and memory with a prefill, which delays it and raises TTFT. They also have to share the same parallelism and batching configuration.</p></div></details>
+      <details class="quiz"><summary>Why can pure "route to the best prefix match" be harmful?</summary>
+        <div class="ans"><p>Popular prefixes would all go to one replica, overloading it while others sit idle. Routing must weigh cache benefit against current load.</p></div></details>
+      <details class="quiz"><summary>Your GPUs show 100% utilization in nvidia-smi. Are they at capacity?</summary>
+        <div class="ans"><p>Not necessarily. That metric means "a kernel was active during the sample window", not "SMs were fully busy". Look at throughput against your benchmarked maximum, queue depth and KV usage instead.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://arxiv.org/abs/2401.09670" target="_blank" rel="noopener">DistServe: Disaggregating Prefill and Decoding for Goodput-optimized LLM Serving</a></li>
+        <li><a href="https://arxiv.org/abs/2311.18677" target="_blank" rel="noopener">Splitwise: Efficient Generative LLM Inference Using Phase Splitting</a></li>
+        <li><a href="https://github.com/ai-dynamo/dynamo" target="_blank" rel="noopener">NVIDIA Dynamo</a> · <a href="https://github.com/llm-d/llm-d" target="_blank" rel="noopener">llm-d</a></li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="disaggregation" data-level="senior">
+<summary><span class="badge l3">senior</span>When is prefill/decode disaggregation worth it, and what does it cost?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>It's worth it at scale with strict, separate TTFT and ITL SLOs, long prompts, or very different prefill and decode loads. Separate pools remove interference and can be scaled and configured independently. Costs: KV transfer bandwidth (e.g. ~640 MB for 2k tokens on a 70B GQA model, needing RDMA or NVLink), extra operational complexity, new failure modes, and possible stranded capacity if the pool ratio is wrong. For small deployments, chunked prefill on one pool is usually enough.</p>
+<h4>What they're testing</h4>
+<p>Judging when an architecture pays off.</p>
+<h4>Follow-ups</h4>
+<ul><li>How would you choose the prefill:decode GPU ratio?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="disaggregation" data-level="mid">
+<summary><span class="badge l2">mid</span>What signals would you autoscale an LLM service on?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Queue depth or waiting requests, KV-cache utilization, TTFT/ITL percentiles against the SLO, and tokens/s against benchmarked capacity. Not CPU, and not raw nvidia-smi utilization. Account for slow cold starts (weights, compilation, graph capture) with warm pools, local weight caches and predictive scaling.</p>
+<h4>What they're testing</h4>
+<p>Production operations knowledge.</p>
+<h4>Follow-ups</h4>
+<ul><li>How do you scale down without dropping streams? (Graceful drain.)</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="disaggregation" data-level="staff">
+<summary><span class="badge l4">staff</span>Design a scheduler that serves interactive and batch traffic on the same GPUs.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Use priority classes: interactive requests are admitted first and their decodes always get budget, with a guaranteed TTFT/ITL target. Batch requests fill leftover token budget and are preemptible (recompute preferred, since they're latency-tolerant). Use admission control per class, fairness across tenants within a class (token-based fair queueing), and maybe a different speculation policy per class. Monitor goodput for interactive traffic and throughput and cost for batch. Scale on interactive SLO signals and let batch traffic soak up idle capacity.</p>
+<h4>What they're testing</h4>
+<p>Policy design with competing objectives.</p>
+<h4>Follow-ups</h4>
+<ul><li>How do you prevent starvation of batch jobs?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 3-4 "Scheduling &amp; Disaggregated Serving" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="11-disaggregation.md">11-disaggregation.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/10-prefix-caching.html"><span class="dir">◀ previous · 3-3</span><span class="t">Prefix Caching &amp; KV Memory</span></a><a class="card next" href="../lessons/12-kernels.html"><span class="dir">next · 4-1 ▶</span><span class="t">Kernels, Fusion &amp; Compilation</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

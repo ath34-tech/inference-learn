@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kernels, Fusion &amp; Compilation · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Kernel fusion, CUDA graphs, Triton, torch.compile and profiling.">
+  <link rel="alternate" type="text/markdown" href="12-kernels.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Kernels, Fusion & Compilation", "description": "Kernel fusion, CUDA graphs, Triton, torch.compile and profiling.", "learningResourceType": "lesson", "educationalLevel": "Expert / Systems", "timeRequired": "PT35M", "teaches": ["Kernel fusion", "CUDA graphs", "Triton & CUTLASS", "Profiling (MFU / MBU)"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/12-kernels.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="kernels">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 4 Expert / Systems / 4-1</div><span class="badge l4">WORLD 4</span><span class="badge">Lesson 4-1</span><span class="badge">~35 min read</span><!--/B:meta--></div>
+      <h1>Kernels, Fusion &amp; Compilation</h1>
+      <p class="lede">Every technique so far eventually runs as GPU kernels. At this level you stop treating PyTorch ops as black boxes and start asking: how many bytes does this kernel move, how many times do we launch it, and what is the CPU doing in the meantime?</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Explain why kernel fusion speeds up memory-bound code</li>
+          <li>Use CUDA graphs to remove launch overhead in decode</li>
+          <li>Write a simple fused kernel in Triton</li>
+          <li>Profile a decode step and compute MBU/MFU</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-kernel">Kernel</a></dt><dd>A function launched on the GPU across a grid of thread blocks. Eager PyTorch runs roughly one kernel per op.</dd></div><div><dt><a href="../vocabulary.html#v-kernel-fusion">Kernel fusion</a></dt><dd>Combining several ops into one kernel, so data stays in registers instead of round-tripping through HBM.</dd></div><div><dt><a href="../vocabulary.html#v-kernel-launch-overhead">Kernel launch overhead</a></dt><dd>A few µs of CPU time per kernel launch. Significant when a decode step launches hundreds of small kernels.</dd></div><div><dt><a href="../vocabulary.html#v-cuda-graph">CUDA graph</a></dt><dd>A recorded sequence of kernel launches that is replayed with a single launch. Removes CPU overhead in decode.</dd></div><div><dt><a href="../vocabulary.html#v-triton-language">Triton (language)</a></dt><dd>A Python-embedded language and compiler for block-level GPU kernels. Not the same thing as Triton Inference Server.</dd></div><div><dt><a href="../vocabulary.html#v-torch-compile">torch.compile</a></dt><dd>PyTorch's compiler. It captures the model graph and generates fused kernels (via TorchInductor/Triton).</dd></div><div><dt><a href="../vocabulary.html#v-cutlass">CUTLASS</a></dt><dd>NVIDIA's C++ template library (with CuTe) for building high-performance GEMM and attention kernels.</dd></div><div><dt><a href="../vocabulary.html#v-nsight-systems">Nsight Systems</a></dt><dd>NVIDIA's whole-system timeline profiler (<code>nsys</code>). Shows CPU threads, CUDA calls, kernels and the gaps between them.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>What a kernel is</h2>
+      <p>A <strong>kernel</strong> is a function launched on the GPU across a grid of thread blocks. Eager PyTorch launches roughly one kernel per op. For an op like <code>y = silu(gate) * up</code>, that's three kernels: <code>silu</code>, <code>mul</code>, and a copy or cast. Each one reads its inputs from HBM and writes its outputs back to HBM.</p>
+
+      <h2>Kernel fusion</h2>
+      <p>Elementwise ops do 1 or 2 FLOPs per element, so they're completely memory-bound. Fusing a chain of them into one kernel means data is read from HBM <strong>once</strong>, all the math happens in registers, and the result is written <strong>once</strong>.</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">unfused</span><span class="blk wide b">read</span><span class="blk wide p">silu</span><span class="blk wide b">write</span><span class="blk wide b">read</span><span class="blk wide p">mul</span><span class="blk wide b">write</span></div>
+        <div class="blkrow"><span class="lbl">fused</span><span class="blk wide b">read</span><span class="blk wide p">silu·mul</span><span class="blk wide b">write</span></div>
+        <div class="cap">same math, less than half the HBM traffic, and one launch instead of two</div>
+      </div>
+      <p>Common fusions in LLM inference:</p>
+      <ul>
+        <li><strong>RMSNorm + residual add</strong> (and optionally quantizing the output to FP8)</li>
+        <li><strong>SwiGLU</strong>: <code>silu(gate) * up</code>, often with the gate and up projections merged into one GEMM</li>
+        <li><strong>QKV projection</strong> as one GEMM, plus <strong>rotary embeddings</strong> fused into the attention kernel or the KV-cache write</li>
+        <li><strong>Dequantization fused into GEMM</strong> (W4A16 kernels like Marlin)</li>
+        <li><strong>Attention</strong> itself: FlashAttention is a big fusion of matmul, softmax and matmul</li>
+        <li><strong>MoE</strong>: routing, permutation and grouped GEMMs fused together</li>
+      </ul>
+
+      <h2>Triton: kernels in Python</h2>
+      <p><strong>Triton</strong> lets you write block-level GPU kernels in a Python-like language. You describe what a block of data does, and the compiler handles thread-level details, memory coalescing and shared memory. Here is a fused SiLU-and-multiply:</p>
+<pre><code><span class="k">import</span> torch, triton
+<span class="k">import</span> triton.language <span class="k">as</span> tl
+
+<span class="n">@triton.jit</span>
+<span class="k">def</span> silu_mul_kernel(gate_ptr, up_ptr, out_ptr, n, BLOCK: tl.constexpr):
+    pid = tl.program_id(<span class="n">0</span>)
+    offs = pid * BLOCK + tl.arange(<span class="n">0</span>, BLOCK)
+    mask = offs &lt; n
+    g = tl.load(gate_ptr + offs, mask=mask).to(tl.float32)
+    u = tl.load(up_ptr + offs, mask=mask).to(tl.float32)
+    y = g * tl.sigmoid(g) * u                      <span class="c"># all in registers</span>
+    tl.store(out_ptr + offs, y.to(out_ptr.dtype.element_ty), mask=mask)
+
+<span class="k">def</span> silu_mul(gate, up):
+    out = torch.empty_like(gate)
+    n = gate.numel()
+    grid = (triton.cdiv(n, <span class="n">1024</span>),)
+    silu_mul_kernel[grid](gate, up, out, n, BLOCK=<span class="n">1024</span>)
+    <span class="k">return</span> out
+
+g = torch.randn(<span class="n">64</span>, <span class="n">14336</span>, device=<span class="s">"cuda"</span>, dtype=torch.bfloat16)
+u = torch.randn_like(g)
+torch.testing.assert_close(silu_mul(g, u), torch.nn.functional.silu(g) * u, rtol=<span class="n">1e-2</span>, atol=<span class="n">1e-2</span>)</code></pre>
+      <p>Other tools you'll meet: <strong>CUDA C++</strong> for full control, <strong>CUTLASS / CuTe</strong> (NVIDIA's templates for high-performance GEMMs and attention), and newer tile-based DSLs. For GEMMs you'll almost always call cuBLAS, CUTLASS or a vendor library rather than writing your own.</p>
+
+      <h2>torch.compile</h2>
+      <p><code>torch.compile</code> traces your PyTorch model into a graph and uses <strong>TorchInductor</strong> to generate fused Triton kernels automatically. Elementwise and reduction chains get fused with little effort. Engines like vLLM use it for the model's "glue" ops, alongside hand-written kernels for attention and GEMMs.</p>
+<pre><code>model = torch.compile(model, mode=<span class="s">"max-autotune-no-cudagraphs"</span>)   <span class="c"># or let the engine manage it</span></code></pre>
+      <div class="callout warn"><span class="tag">WATCH OUT</span>
+        <p>Dynamic shapes (batch size and sequence length change every step) can cause recompilations. Engines mark dimensions as dynamic or compile for a set of bucketed sizes.</p>
+      </div>
+
+      <h2>CUDA graphs</h2>
+      <p>One decode step for a 32-layer model launches hundreds of kernels. If each launch costs ~5 µs of CPU time, that's on the order of a millisecond of pure overhead on a step that might take 5–10 ms. At small batch, the GPU can end up <strong>waiting for the CPU</strong>.</p>
+      <p><strong>CUDA graphs</strong> record the whole sequence of kernel launches once and then <strong>replay</strong> it with a single launch:</p>
+<pre><code><span class="c"># capture once (static input/output buffers!)</span>
+g = torch.cuda.CUDAGraph()
+<span class="k">with</span> torch.cuda.graph(g):
+    static_out = model.decode_step(static_input_ids, static_positions)
+
+<span class="c"># every step: copy new data into the static buffers, then replay</span>
+static_input_ids.copy_(next_ids)
+static_positions.copy_(next_pos)
+g.replay()</code></pre>
+      <ul>
+        <li>Graphs need <strong>fixed shapes and fixed memory addresses</strong>, so engines capture one graph per batch size bucket (1, 2, 4, 8, … 256) and pad up to the nearest one.</li>
+        <li>They're mostly used for <strong>decode</strong>. Prefill shapes vary too much, and prefill is compute-bound anyway, so launch overhead matters less there.</li>
+        <li>Capturing takes time and memory at startup. That's part of why engine startup is slow.</li>
+      </ul>
+
+      <h2>Overlapping CPU &amp; GPU</h2>
+      <p>Even with graphs, the CPU must schedule the next step, prepare inputs, sample, detokenize and stream. Modern engines move toward <strong>asynchronous scheduling</strong>: prepare step N+1 on the CPU while the GPU runs step N, keep sampling on the GPU, and push detokenization and HTTP handling into separate processes. vLLM's V1 architecture and SGLang's overlap scheduler are both built around this.</p>
+
+      <h2>Profiling</h2>
+      <ul>
+        <li><strong>PyTorch Profiler</strong>: op-level timeline. A good first look.</li>
+        <li><strong>Nsight Systems</strong> (<code>nsys</code>): whole-system timeline across CPU threads, CUDA API calls, kernels and NCCL. Gaps between kernels show CPU overhead.</li>
+        <li><strong>Nsight Compute</strong> (<code>ncu</code>): deep dive on one kernel: achieved bandwidth, occupancy, tensor-core use, roofline position.</li>
+      </ul>
+<pre><code>nsys profile -o decode_trace --trace=cuda,nvtx,osrt python bench_decode.py
+ncu --set full -k regex:attention -o attn_report python bench_decode.py</code></pre>
+      <div class="callout math"><span class="tag">COMPUTE MBU</span>
+        <p>Measured decode step: 9.0 ms for Llama-3-8B BF16 (16 GB of weights) at batch 32 with an average context of 2k tokens (32 × 2048 × 128 KiB ≈ 8.6 GB of KV). Bytes per step ≈ 24.6 GB, so achieved bandwidth = 24.6 GB / 9 ms ≈ 2.73 TB/s. On an H100 (3.35 TB/s) that's <strong>MBU ≈ 82%</strong>, which is very good.</p>
+        <p>Sanity check: if you ever compute MBU above 100%, the measurement is wrong (wrong step time, wrong context lengths, or prefix caching skipping work). This check catches benchmarking bugs all the time.</p>
+      </div>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Why does fusing RMSNorm with the residual add help even though it saves no FLOPs?</summary>
+        <div class="ans"><p>Both ops are memory-bound. Fusion removes an HBM round-trip of the hidden-state tensor (one write and one read) plus a kernel launch. Time is set by bytes moved, not by FLOPs.</p></div></details>
+      <details class="quiz"><summary>Why do engines capture CUDA graphs for batch sizes 1, 2, 4, 8… rather than every size?</summary>
+        <div class="ans"><p>Each graph has fixed shapes and uses memory. Capturing every size would cost too much startup time and memory. Padding to the next bucket wastes a little compute but keeps the number of graphs small.</p></div></details>
+      <details class="quiz"><summary>An nsys trace shows 2 ms gaps between decode steps where no kernels run. What's likely happening?</summary>
+        <div class="ans"><p>CPU-side work is blocking the GPU: scheduling, input preparation, sampling copied back to the host, detokenization, or Python overhead. Fixes: async scheduling, keep sampling on the GPU, CUDA graphs, and move work off the critical path.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://triton-lang.org/main/getting-started/tutorials/index.html" target="_blank" rel="noopener">Triton tutorials</a> (start with vector add, then fused softmax and matmul)</li>
+        <li><a href="https://github.com/gpu-mode/lectures" target="_blank" rel="noopener">GPU MODE lectures</a>, a community series on CUDA, Triton and profiling</li>
+        <li><a href="https://pytorch.org/blog/accelerating-generative-ai-2/" target="_blank" rel="noopener">Accelerating Generative AI with PyTorch II: GPT, Fast</a> (torch.compile, quantization, speculative decoding)</li>
+        <li><a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/" target="_blank" rel="noopener">CUDA C++ Programming Guide</a></li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="kernels" data-level="mid">
+<summary><span class="badge l2">mid</span>What are CUDA graphs and why do inference engines use them?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>They record a sequence of kernel launches with fixed shapes and addresses, then replay it with one launch. Small-batch decode steps are short (milliseconds) but launch hundreds of kernels, so CPU launch overhead can rival GPU time. Graphs remove it. Engines capture one graph per batch-size bucket and pad up, mostly for decode. The costs are capture time, memory, and rigid shapes.</p>
+<h4>What they're testing</h4>
+<p>Understanding CPU vs GPU overheads.</p>
+<h4>Follow-ups</h4>
+<ul><li>Why aren't graphs typically used for prefill?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="kernels" data-level="mid">
+<summary><span class="badge l2">mid</span>Give an example of kernel fusion in an LLM and explain the speedup.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>SwiGLU: silu(gate) × up. Unfused, it's separate kernels that each read and write the full [tokens × 14336] tensors to HBM. Fused, it's one read of each input and one write of the output. Elementwise work is memory-bound, so time drops roughly in proportion to the bytes saved, plus launches. Other examples: RMSNorm+residual(+FP8 quant), rotary fused into attention, dequant fused into GEMM.</p>
+<h4>What they're testing</h4>
+<p>Bytes-moved reasoning at the kernel level.</p>
+<h4>Follow-ups</h4>
+<ul><li>Sketch that kernel in Triton.</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="kernels" data-level="senior">
+<summary><span class="badge l3">senior</span>A decode step takes 2× longer than your speed-of-light estimate. How do you find out why?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>First check the estimate itself: include KV bytes at the actual context lengths and the communication. Then take an Nsight Systems trace and look for gaps between kernels (CPU-bound: scheduling, sampling sync, Python, missing CUDA graphs), many tiny kernels (missing fusion), and slow collectives. Then use Nsight Compute on the top kernels for achieved bandwidth vs peak, occupancy and wave quantization. Compute MBU per kernel class and fix the biggest gap first.</p>
+<h4>What they're testing</h4>
+<p>A systematic performance-debugging method.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which GEMM shapes in decode tend to underutilize the GPU?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 4-1 "Kernels, Fusion &amp; Compilation" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="12-kernels.md">12-kernels.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/11-disaggregation.html"><span class="dir">◀ previous · 3-4</span><span class="t">Scheduling &amp; Disaggregated Serving</span></a><a class="card next" href="../lessons/13-production.html"><span class="dir">next · 4-2 ▶</span><span class="t">Serving in Production</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

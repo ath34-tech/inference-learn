@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Practice · InferenceLearn</title>
+  <meta name="description" content="Practice inference engineering: a scored quiz arcade plus a full multiple-choice question bank with answers and explanations, interview prep, and a napkin-math workbook.">
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <link rel="alternate" type="text/markdown" href="practice.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Practice: Quiz Arcade", "description": "Scored multiple-choice quiz game plus the full question bank with answers and explanations.", "url": "practice.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="practice">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// training grounds</span>
+    <h1>Practice</h1>
+    <p>Reading isn't learning until you can use it. Test yourself in the arcade, prepare for interviews, then work through the napkin-math workbook.</p>
+  </section>
+
+  <section class="container" style="padding-top:24px">
+    <div class="grid grid-3" style="margin-bottom:46px">
+      <a class="card hub-card" href="#arcade"><span class="badge pink">play</span><span class="big">45</span><h3>Quiz Arcade</h3><p class="muted" style="font-size:13.5px;margin:0">Multiple-choice game with lives, streaks and a hi-score. Every answer comes with an explanation.</p></a>
+      <a class="card hub-card" href="interview.html"><span class="badge l3">prepare</span><span class="big">39</span><h3>Interview Prep</h3><p class="muted" style="font-size:13.5px;margin:0">Real-style interview questions with model answers, what the interviewer is testing, and follow-ups.</p></a>
+      <a class="card hub-card" href="workbook.html"><span class="badge l2">think</span><span class="big">14</span><h3>Workbook</h3><p class="muted" style="font-size:13.5px;margin:0">Napkin-math problems with hints and step-by-step solutions, explain-it-back prompts and experiments.</p></a>
+    </div>
+
+    <div class="arcade" id="arcade" aria-live="polite">
+      <p class="center">Loading arcade… (needs JavaScript; the full question bank is below.)</p>
+    </div>
+
+    <h2 style="margin-top:56px">Question bank (study mode)</h2>
+    <p class="muted">Every arcade question with its answer and explanation. Good for revision, or for an AI tutor to quiz you from.</p>
+    <details class="quiz"><summary>Show all 45 questions with answers</summary>
+    <div class="ans">
+    <ol class="qbank" id="qbank">
+
+      <!-- ===== FOUNDATIONS ===== -->
+      <li data-topic="foundations" data-lesson="how-inference-works" data-a="B">
+        <p class="q">Why is LLM decode usually memory-bandwidth-bound?</p>
+        <ol class="opts" type="A"><li>Softmax is expensive</li><li>Each step reads all the weights but does very little math per byte</li><li>The tokenizer runs on the GPU</li><li>Tensor cores can't do matrix-vector products</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> One decode step multiplies the weights by a single token vector per sequence. That's about 2 FLOPs per weight read, far below the ~300 FLOP/byte an H100 needs to be compute-bound.</p></li>
+      <li data-topic="foundations" data-lesson="how-inference-works" data-a="C">
+        <p class="q">Which metric is mostly determined by the prefill phase?</p>
+        <ol class="opts" type="A"><li>Inter-token latency</li><li>TPOT</li><li>Time to first token</li><li>Output tokens/s per user</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Prefill processes the prompt and produces the first token, so it dominates TTFT (along with queueing).</p></li>
+      <li data-topic="foundations" data-lesson="how-inference-works" data-a="A">
+        <p class="q">What happens to the sampling distribution as temperature approaches 0?</p>
+        <ol class="opts" type="A"><li>It becomes greedy (argmax)</li><li>It becomes uniform</li><li>It's unaffected</li><li>The model refuses to answer</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Dividing logits by a tiny T exaggerates the gaps, so nearly all probability goes to the top token.</p></li>
+      <li data-topic="foundations" data-lesson="gpu-fundamentals" data-a="D">
+        <p class="q">For a BF16 linear layer with batch B ≪ hidden size, arithmetic intensity is roughly…</p>
+        <ol class="opts" type="A"><li>1, always</li><li>hidden_size</li><li>B²</li><li>B FLOPs per byte</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> FLOPs = 2·B·d², bytes ≈ 2·d² (the weights), so AI ≈ B. More tokens per weight read means more math per byte.</p></li>
+      <li data-topic="foundations" data-lesson="gpu-fundamentals" data-a="B">
+        <p class="q">Best-case single-user decode speed of an 8B BF16 model on an H100 (3.35 TB/s)?</p>
+        <ol class="opts" type="A"><li>~20 tok/s</li><li>~200 tok/s</li><li>~2,000 tok/s</li><li>~20,000 tok/s</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> 16 GB ÷ 3.35 TB/s ≈ 4.8 ms per step, so ~209 tok/s at most. Real engines get a good fraction of that.</p></li>
+      <li data-topic="foundations" data-lesson="gpu-fundamentals" data-a="C">
+        <p class="q">The ridge point of a GPU is…</p>
+        <ol class="opts" type="A"><li>Its maximum clock speed</li><li>The largest batch that fits in memory</li><li>Peak FLOP/s divided by memory bandwidth</li><li>The temperature at which it throttles</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Below that arithmetic intensity you're memory-bound; above it, compute-bound. It's ~295 FLOP/byte on an H100.</p></li>
+      <li data-topic="foundations" data-lesson="metrics" data-a="A">
+        <p class="q">A service handles 30 req/s with 5 s average latency. By Little's law, how many requests are in flight?</p>
+        <ol class="opts" type="A"><li>150</li><li>6</li><li>35</li><li>0.17</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Concurrency = throughput × latency = 30 × 5 = 150.</p></li>
+      <li data-topic="foundations" data-lesson="metrics" data-a="D">
+        <p class="q">What is "goodput"?</p>
+        <ol class="opts" type="A"><li>Throughput including input tokens</li><li>Peak tokens/s at maximum batch</li><li>GPU utilization from nvidia-smi</li><li>Throughput counting only requests that met their SLOs</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Goodput measures useful work: requests delivered within latency targets.</p></li>
+      <li data-topic="foundations" data-lesson="metrics" data-a="B">
+        <p class="q">An H100 costs $3/hour and serves 3,000 output tok/s. Cost per 1M output tokens?</p>
+        <ol class="opts" type="A"><li>~$3.00</li><li>~$0.28</li><li>~$0.03</li><li>~$10.80</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> 3,000 × 3,600 = 10.8M tokens/hour, and $3 ÷ 10.8 ≈ $0.28 per million.</p></li>
+
+      <!-- ===== MEMORY: KV + BATCHING ===== -->
+      <li data-topic="memory" data-lesson="kv-cache" data-a="C">
+        <p class="q">Why are queries not stored in the KV cache?</p>
+        <ol class="opts" type="A"><li>They're too large</li><li>They're recomputed by the sampler</li><li>Only the current token's query is ever needed</li><li>Queries are stored in the embedding table</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Each step's new query attends over all cached keys and values. Past queries are never used again.</p></li>
+      <li data-topic="memory" data-lesson="kv-cache" data-a="A">
+        <p class="q">Llama-3-8B: 32 layers, 8 KV heads, head dim 128, BF16. KV cache per token?</p>
+        <ol class="opts" type="A"><li>128 KiB</li><li>16 KiB</li><li>512 KiB</li><li>1 MiB</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> 2 × 32 × 8 × 128 × 2 bytes = 131,072 B = 128 KiB.</p></li>
+      <li data-topic="memory" data-lesson="kv-cache" data-a="D">
+        <p class="q">Batching many sequences amortizes weight reads. Why doesn't it amortize KV-cache reads?</p>
+        <ol class="opts" type="A"><li>The KV cache lives on the CPU</li><li>KV reads are cached in L2</li><li>Attention is compute-bound</li><li>Each sequence has its own unique KV cache</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Weights are shared by every sequence, but every sequence's K/V is different and must be read separately.</p></li>
+      <li data-topic="memory" data-lesson="kv-cache" data-a="B">
+        <p class="q">Which change shrinks the KV cache without retraining the model?</p>
+        <ol class="opts" type="A"><li>Switching MHA to GQA</li><li>Storing the KV cache in FP8</li><li>Adding more layers</li><li>Using MLA</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> KV-cache quantization is a serving-time choice. GQA and MLA are architectural and decided at training time.</p></li>
+      <li data-topic="memory" data-lesson="batching" data-a="C">
+        <p class="q">The key idea of continuous batching is…</p>
+        <ol class="opts" type="A"><li>Padding all sequences to the same length</li><li>Waiting 5 ms to collect a full batch</li><li>Making scheduling decisions every decode step, so sequences join and leave freely</li><li>Running prefill and decode on different GPUs</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Iteration-level scheduling (Orca) keeps the batch full: finished sequences leave immediately and new ones join at the next step.</p></li>
+      <li data-topic="memory" data-lesson="batching" data-a="A">
+        <p class="q">Long prompts arriving cause stream "freezes" for other users. What's the standard fix?</p>
+        <ol class="opts" type="A"><li>Chunked prefill with a per-step token budget</li><li>Raise temperature</li><li>Disable the KV cache</li><li>Use static batching</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Chunking spreads a long prefill over many steps, mixed with decodes, so inter-token latency stays smooth.</p></li>
+      <li data-topic="memory" data-lesson="batching" data-a="D">
+        <p class="q">In vLLM, when KV memory runs out mid-generation, the default response is to…</p>
+        <ol class="opts" type="A"><li>Crash with OOM</li><li>Truncate the prompt</li><li>Switch to CPU inference</li><li>Preempt a sequence and recompute its KV later</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Preemption by recompute (or swapping to CPU) frees blocks. Frequent preemptions mean concurrency is set too high.</p></li>
+      <li data-topic="memory" data-lesson="batching" data-a="B">
+        <p class="q">Static batching wastes GPU time mainly because…</p>
+        <ol class="opts" type="A"><li>It can't use tensor cores</li><li>Finished sequences sit idle until the longest one in the batch completes</li><li>It requires FP32</li><li>It doesn't support sampling</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> The straggler problem: slots stay blocked by the slowest sequence, and new requests wait outside.</p></li>
+
+      <!-- ===== ATTENTION & QUANT ===== -->
+      <li data-topic="attention" data-lesson="attention" data-a="C">
+        <p class="q">64 query heads and 8 KV heads (GQA). How much smaller is the KV cache than MHA's?</p>
+        <ol class="opts" type="A"><li>2×</li><li>4×</li><li>8×</li><li>64×</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> 64 ÷ 8 = 8× fewer K/V heads, so the cache is 8× smaller.</p></li>
+      <li data-topic="attention" data-lesson="attention" data-a="A">
+        <p class="q">FlashAttention speeds up attention mainly by…</p>
+        <ol class="opts" type="A"><li>Avoiding HBM reads/writes of the N×N score matrix through tiling in SRAM</li><li>Approximating softmax with a polynomial</li><li>Skipping distant tokens</li><li>Using INT4 math</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> It's IO-aware and exact. It tiles Q/K/V on-chip and uses online softmax, so the big matrix never touches HBM.</p></li>
+      <li data-topic="attention" data-lesson="attention" data-a="B">
+        <p class="q">PagedAttention mainly solves which problem?</p>
+        <ol class="opts" type="A"><li>Slow softmax</li><li>KV-cache memory fragmentation and over-reservation</li><li>Tokenizer speed</li><li>Multi-GPU communication</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> Fixed-size blocks plus a block table, like OS paging, cut KV waste from 60–80% to a few percent and allow block sharing.</p></li>
+      <li data-topic="attention" data-lesson="attention" data-a="D">
+        <p class="q">Online softmax lets you compute softmax over a row…</p>
+        <ol class="opts" type="A"><li>Only in FP32</li><li>Without exponentials</li><li>Approximately, with bounded error</li><li>Chunk by chunk, keeping a running max and sum and rescaling</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> When a larger max appears, the earlier partial sums are rescaled by exp(m_old − m_new). The result is exact.</p></li>
+      <li data-topic="attention" data-lesson="quantization" data-a="B">
+        <p class="q">At batch size 1, which scheme speeds up decode the most?</p>
+        <ol class="opts" type="A"><li>W8A8 INT8</li><li>W4A16 (4-bit weight-only)</li><li>FP32 weights</li><li>Quantizing only the LM head</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> Batch 1 is purely memory-bound, so the fewest bytes per weight wins. Faster low-precision compute barely matters.</p></li>
+      <li data-topic="attention" data-lesson="quantization" data-a="C">
+        <p class="q">Why is per-group quantization (e.g. groups of 128) more accurate than per-tensor?</p>
+        <ol class="opts" type="A"><li>It uses more bits per weight</li><li>It skips the outliers</li><li>Each group gets its own scale, so one large value only affects its own group</li><li>It's done during training</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Finer scales follow local ranges. The cost is a little extra storage for the scales.</p></li>
+      <li data-topic="attention" data-lesson="quantization" data-a="A">
+        <p class="q">SmoothQuant makes W8A8 work by…</p>
+        <ol class="opts" type="A"><li>Moving activation outliers into the weights with an equivalent per-channel rescale</li><li>Keeping outliers in FP16</li><li>Retraining the model</li><li>Clipping all activations to ±1</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Divide activations and multiply weights by the same per-channel factor. The product is unchanged and both become easier to quantize.</p></li>
+      <li data-topic="attention" data-lesson="quantization" data-a="D">
+        <p class="q">Symmetric INT4 quantization has how many usable levels (with q_max = 7)?</p>
+        <ol class="opts" type="A"><li>4</li><li>8</li><li>16</li><li>15</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> −7…+7 = 15 levels. (Full INT4 has 16 values, but the symmetric scheme usually leaves −8 unused.)</p></li>
+      <li data-topic="attention" data-lesson="quantization" data-a="B">
+        <p class="q">GPTQ improves on round-to-nearest by…</p>
+        <ol class="opts" type="A"><li>Using larger groups</li><li>Updating not-yet-quantized weights to compensate for each rounding error, using second-order info</li><li>Fine-tuning with RL</li><li>Quantizing activations first</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> It quantizes column by column and uses Hessian information from calibration data to fix up the remaining columns.</p></li>
+
+      <!-- ===== ADVANCED ===== -->
+      <li data-topic="advanced" data-lesson="speculative-decoding" data-a="A">
+        <p class="q">With the proper acceptance rule, speculative decoding's outputs are…</p>
+        <ol class="opts" type="A"><li>Distributed exactly like the target model's</li><li>Slightly lower quality</li><li>Identical to the draft model's</li><li>Always greedy</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Rejection sampling (accept with min(1, p/q), else resample from max(0, p−q)) is lossless.</p></li>
+      <li data-topic="advanced" data-lesson="speculative-decoding" data-a="C">
+        <p class="q">α = 0.8, k = 4 draft tokens. Expected tokens per target pass?</p>
+        <ol class="opts" type="A"><li>4.0</li><li>0.8</li><li>~3.36</li><li>5.0</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> (1 − 0.8⁵) ÷ (1 − 0.8) = 0.672 ÷ 0.2 ≈ 3.36.</p></li>
+      <li data-topic="advanced" data-lesson="speculative-decoding" data-a="D">
+        <p class="q">When does speculative decoding help least?</p>
+        <ol class="opts" type="A"><li>Batch size 1, latency-sensitive chat</li><li>Code editing with lots of repeated text</li><li>Low-temperature structured output</li><li>Very high batch sizes where the GPU is compute-bound</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> When compute-bound, verifying extra tokens costs real FLOPs, and rejected drafts are wasted work.</p></li>
+      <li data-topic="advanced" data-lesson="parallelism" data-a="B">
+        <p class="q">Which parallelism reduces per-token latency for a model that already fits on one node?</p>
+        <ol class="opts" type="A"><li>Data parallelism</li><li>Tensor parallelism</li><li>Pipeline parallelism</li><li>More replicas</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> TP splits each layer's weights, so every GPU reads only a fraction per step. PP and DP don't make a single token faster.</p></li>
+      <li data-topic="advanced" data-lesson="parallelism" data-a="A">
+        <p class="q">An MoE model has 671B total / 37B active parameters. Memory must hold…</p>
+        <ol class="opts" type="A"><li>All 671B parameters</li><li>Only the 37B active ones</li><li>Only the router</li><li>Half of the experts</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Any token can be routed to any expert, so all experts must be resident. Compute per token scales with the active parameters.</p></li>
+      <li data-topic="advanced" data-lesson="parallelism" data-a="C">
+        <p class="q">Expert parallelism mainly relies on which communication pattern?</p>
+        <ol class="opts" type="A"><li>All-reduce</li><li>Broadcast</li><li>All-to-all</li><li>No communication</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Tokens are dispatched to whichever GPUs hold their chosen experts, then combined back, both via all-to-all.</p></li>
+      <li data-topic="advanced" data-lesson="prefix-caching" data-a="D">
+        <p class="q">Your prompt template starts with the current timestamp. Effect on prefix caching?</p>
+        <ol class="opts" type="A"><li>None</li><li>Better hit rate</li><li>Only TPOT changes</li><li>The hit rate collapses, because the first block differs every request</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Block keys chain the whole prefix, so a change at the very start breaks every later match. Put dynamic content last.</p></li>
+      <li data-topic="advanced" data-lesson="prefix-caching" data-a="B">
+        <p class="q">Why does a block's cache key include its parent block's hash?</p>
+        <ol class="opts" type="A"><li>To save memory</li><li>Because KV depends on all preceding tokens, not just the block's own tokens</li><li>For security</li><li>To support FP8</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> The same 16 tokens after a different prefix produce different KV. Chaining the hashes encodes the whole prefix.</p></li>
+      <li data-topic="advanced" data-lesson="disaggregation" data-a="A">
+        <p class="q">The main benefit of prefill/decode disaggregation is…</p>
+        <ol class="opts" type="A"><li>Removing interference, so TTFT and ITL can be tuned and scaled independently</li><li>Smaller model weights</li><li>No need for a KV cache</li><li>Lower precision</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Separate pools stop prefills from stalling decodes. The cost is transferring the KV cache between them.</p></li>
+      <li data-topic="advanced" data-lesson="disaggregation" data-a="C">
+        <p class="q">Which is the WORST autoscaling signal for an LLM server?</p>
+        <ol class="opts" type="A"><li>Queue depth</li><li>KV cache utilization</li><li>CPU utilization</li><li>p90 TTFT vs SLO</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> The work happens on the GPU. CPU usage says almost nothing about inference capacity.</p></li>
+      <li data-topic="advanced" data-lesson="disaggregation" data-a="B">
+        <p class="q">Why can pure "route to the best prefix-cache match" routing backfire?</p>
+        <ol class="opts" type="A"><li>Cache hits are slower</li><li>Popular prefixes overload one replica while others idle</li><li>It breaks streaming</li><li>It disables batching</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> Good routers weigh cache overlap against current load.</p></li>
+
+      <!-- ===== SYSTEMS: KERNELS & PRODUCTION ===== -->
+      <li data-topic="systems" data-lesson="kernels" data-a="D">
+        <p class="q">Fusing RMSNorm with the residual add speeds things up because…</p>
+        <ol class="opts" type="A"><li>It reduces FLOPs</li><li>It enables FP4</li><li>It improves accuracy</li><li>It removes an HBM round-trip and a kernel launch for memory-bound ops</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Elementwise ops are memory-bound. Time follows bytes moved, and fusion moves fewer bytes.</p></li>
+      <li data-topic="systems" data-lesson="kernels" data-a="A">
+        <p class="q">CUDA graphs mainly help with…</p>
+        <ol class="opts" type="A"><li>CPU kernel-launch overhead, especially in small-batch decode</li><li>Large prefill FLOPs</li><li>Model accuracy</li><li>Network latency</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Hundreds of launches are replayed as one, so the GPU stops waiting on the CPU.</p></li>
+      <li data-topic="systems" data-lesson="kernels" data-a="C">
+        <p class="q">Why do engines capture CUDA graphs only for batch sizes like 1, 2, 4, 8…?</p>
+        <ol class="opts" type="A"><li>GPUs only support powers of two</li><li>Graphs require FP8</li><li>Each graph has fixed shapes and costs memory and startup time, so engines pad to buckets</li><li>Odd batch sizes are slower</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Padding to the next bucket wastes a little compute but keeps the number of graphs manageable.</p></li>
+      <li data-topic="systems" data-lesson="kernels" data-a="B">
+        <p class="q">You compute an MBU of 115%. What does that mean?</p>
+        <ol class="opts" type="A"><li>Excellent kernels</li><li>Your measurement or byte accounting is wrong</li><li>The GPU is overclocked</li><li>Prefix caching is off</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> You can't beat peak bandwidth. Check the step timing, context lengths, and whether caching skipped work.</p></li>
+      <li data-topic="systems" data-lesson="production" data-a="D">
+        <p class="q">Your benchmark peaks at 9k tok/s, but p90 TPOT breaks the SLO above 6k tok/s. Your real capacity is…</p>
+        <ol class="opts" type="A"><li>9k tok/s</li><li>15k tok/s</li><li>7.5k tok/s</li><li>~6k tok/s</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Capacity is the highest load that still meets the SLO: the knee of the curve, not the peak.</p></li>
+      <li data-topic="systems" data-lesson="production" data-a="A">
+        <p class="q">Why must a server stop generating when a client disconnects?</p>
+        <ol class="opts" type="A"><li>Otherwise the sequence keeps holding a batch slot, KV memory and GPU time for nobody</li><li>HTTP requires it</li><li>To keep logs small</li><li>Tokenizers can't handle it</li></ol>
+        <p class="ex"><strong>Answer: A.</strong> Abandoned sequences take capacity away from real users.</p></li>
+      <li data-topic="systems" data-lesson="production" data-a="C">
+        <p class="q">Which load-testing style best reveals queueing collapse?</p>
+        <ol class="opts" type="A"><li>Closed-loop with 1 user</li><li>A single long request</li><li>Open-loop: requests arrive at a target rate regardless of completions</li><li>Running the same prompt 1000× with caching on</li></ol>
+        <p class="ex"><strong>Answer: C.</strong> Closed-loop load slows itself down when the server slows, which hides overload. Open-loop doesn't.</p></li>
+      <li data-topic="systems" data-lesson="production" data-a="B">
+        <p class="q">KV usage sits at 99% and preemptions are climbing. A reasonable first fix is…</p>
+        <ol class="opts" type="A"><li>Raise max-num-seqs</li><li>Lower max-num-seqs (or add replicas / use FP8 KV)</li><li>Raise temperature</li><li>Disable chunked prefill</li></ol>
+        <p class="ex"><strong>Answer: B.</strong> You're admitting more concurrent sequences than memory holds. Admit fewer, or make more room.</p></li>
+      <li data-topic="systems" data-lesson="production" data-a="D">
+        <p class="q">At temperature 0, an engine sometimes gives slightly different outputs for the same prompt. The most likely cause is…</p>
+        <ol class="opts" type="A"><li>A bug in the tokenizer</li><li>Random seeds</li><li>Speculative decoding is lossy</li><li>Batch composition changes floating-point reduction order</li></ol>
+        <p class="ex"><strong>Answer: D.</strong> Different batch shapes pick different kernels and summation orders, and tiny numeric differences can flip an argmax.</p></li>
+    </ol>
+    </div>
+    </details>
+
+    <div class="grid grid-2" style="margin-top:46px">
+      <a class="card" href="interview.html"><span class="badge l3">next</span><h3>Interview Prep ▶</h3><p class="muted" style="font-size:13.5px;margin:0">39 questions from junior to staff level, plus system-design prompts.</p></a>
+      <a class="card" href="workbook.html"><span class="badge l2">next</span><h3>Workbook ▶</h3><p class="muted" style="font-size:13.5px;margin:0">Napkin-math problems with full worked solutions.</p></a>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

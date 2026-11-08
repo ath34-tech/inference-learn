@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speculative Decoding · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Draft then verify: get more than one token per forward pass, with the same output distribution.">
+  <link rel="alternate" type="text/markdown" href="08-speculative-decoding.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Speculative Decoding", "description": "Draft then verify: get more than one token per forward pass, with the same output distribution.", "learningResourceType": "lesson", "educationalLevel": "Advanced", "timeRequired": "PT30M", "teaches": ["Draft & verify", "Rejection sampling", "Expected speedup", "Medusa / EAGLE / MTP"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/08-speculative-decoding.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="speculative-decoding">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 3 Advanced / 3-1</div><span class="badge l3">WORLD 3</span><span class="badge">Lesson 3-1</span><span class="badge">~30 min read</span><!--/B:meta--></div>
+      <h1>Speculative Decoding</h1>
+      <p class="lede">Decode is memory-bound: checking 5 tokens costs about the same as producing 1. Speculative decoding exploits this. Guess several tokens cheaply, then verify them all in one forward pass of the big model, and keep exactly the output distribution you'd have had anyway.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Walk through the draft → verify → accept loop</li>
+          <li>Explain why rejection sampling keeps the output distribution identical</li>
+          <li>Estimate speedup from acceptance rate and draft length</li>
+          <li>Compare draft methods: draft models, n-gram, Medusa, EAGLE, MTP</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-speculative-decoding">Speculative decoding</a></dt><dd>Draft several tokens cheaply, then verify them all in one target-model pass. The output distribution is unchanged.</dd></div><div><dt><a href="../vocabulary.html#v-draft-model">Draft model</a></dt><dd>The cheap proposer in speculative decoding: a small model, n-gram lookup, or extra heads.</dd></div><div><dt><a href="../vocabulary.html#v-target-model">Target model</a></dt><dd>The big model whose output distribution you want. It verifies the drafts.</dd></div><div><dt><a href="../vocabulary.html#v-acceptance-rate">Acceptance rate</a></dt><dd>α: the probability that a drafted token is accepted. Expected tokens per pass = (1 − α^(k+1)) ÷ (1 − α).</dd></div><div><dt><a href="../vocabulary.html#v-rejection-sampling">Rejection sampling</a></dt><dd>Accept a draft token with probability min(1, p/q), otherwise resample from max(0, p − q). This makes speculation lossless.</dd></div><div><dt><a href="../vocabulary.html#v-eagle-medusa">EAGLE / Medusa</a></dt><dd>Speculative methods that draft with lightweight heads attached to the target model instead of a separate model.</dd></div><div><dt><a href="../vocabulary.html#v-mtp">MTP</a></dt><dd>Multi-Token Prediction: modules trained to predict several future tokens. They can serve as speculative drafts.</dd></div><div><dt><a href="../vocabulary.html#v-tree-attention">Tree attention</a></dt><dd>Verifying a tree of alternative drafts in one pass with a special attention mask.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>The core idea</h2>
+      <p>A forward pass of the target model over <code>k+1</code> tokens costs about the same as over 1 token at low batch, because the weight reads dominate. So if something cheap can <em>guess</em> the next k tokens, the big model can check all k in one pass:</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">draft guesses</span><span class="blk wide y">the</span><span class="blk wide y">cat</span><span class="blk wide y">sat</span><span class="blk wide y">on</span><span class="blk wide y">a</span></div>
+        <div class="blkrow"><span class="lbl">target checks</span><span class="blk wide m">the ✓</span><span class="blk wide m">cat ✓</span><span class="blk wide m">sat ✓</span><span class="blk wide p">on ✗ → "in"</span><span class="blk wide x">(drop)</span></div>
+        <div class="cap">3 accepted + 1 corrected token = 4 tokens from a single target forward pass</div>
+      </div>
+      <ol>
+        <li><strong>Draft</strong>: a cheap method proposes k tokens <code>x₁…xₖ</code>, with draft probabilities <code>q(xᵢ)</code>.</li>
+        <li><strong>Verify</strong>: run the target model once on the context plus all k drafts. This gives the target probabilities <code>p(·)</code> at each of the k+1 positions.</li>
+        <li><strong>Accept/reject</strong> left to right. At the first rejection, sample a corrected token and discard the remaining drafts.</li>
+        <li>If all k are accepted, you also get a free <strong>bonus token</strong> from the last position.</li>
+      </ol>
+
+      <h2>Why the output is identical</h2>
+      <p>Speculative sampling (Leviathan et al.; Chen et al., 2023) uses a rejection-sampling rule:</p>
+      <div class="formula">accept draft token x with probability <b>min(1, p(x) / q(x))</b><br><br>on rejection, sample from <b>norm( max(0, p − q) )</b></div>
+      <p>You can prove that the accepted-or-resampled token is distributed <strong>exactly according to p</strong>, the target model's distribution. Speculative decoding is <strong>lossless</strong>: it changes speed, not output. With greedy decoding it's even simpler: accept while the draft token equals the target's argmax.</p>
+<pre><code><span class="c"># greedy speculative decoding: one verify step</span>
+<span class="k">def</span> spec_step(target, draft, ctx, k=<span class="n">4</span>):
+    proposal = draft.greedy_generate(ctx, k)          <span class="c"># k cheap tokens</span>
+    logits = target(ctx + proposal)                   <span class="c"># ONE big forward pass</span>
+    preds = logits[-(k + <span class="n">1</span>):].argmax(-<span class="n">1</span>)               <span class="c"># target's choice at each position</span>
+    out = []
+    <span class="k">for</span> i <span class="k">in</span> range(k):
+        <span class="k">if</span> proposal[i] == preds[i]:
+            out.append(proposal[i])                    <span class="c"># accepted</span>
+        <span class="k">else</span>:
+            out.append(preds[i]); <span class="k">return</span> out              <span class="c"># corrected, stop</span>
+    out.append(preds[k])                               <span class="c"># all accepted: bonus token</span>
+    <span class="k">return</span> out                                         <span class="c"># remember to roll back rejected KV entries</span></code></pre>
+
+      <h2>Expected speedup</h2>
+      <p>If each draft token is accepted independently with probability <strong>α</strong> (the acceptance rate), the expected number of tokens per verify step with draft length k is:</p>
+      <div class="formula">E[tokens] = <b>(1 − α<sup>k+1</sup>) / (1 − α)</b></div>
+      <p>With α = 0.8 and k = 4 that's (1 − 0.8⁵) / 0.2 ≈ <strong>3.36 tokens</strong> per target pass. Divide by the cost of a step (target pass + k draft passes) to get the ideal speedup.</p>
+      <div class="widget" id="spec-calc">
+        <h4>▶ Speculative decoding lab</h4>
+        <p class="intro">Set how often the draft is right (α) and how far it guesses ahead (k). Then <strong>roll the dice</strong>: each row is one target-model pass. ✓ accepted · ✗ rejected · +1 the target's own token (a correction or a bonus).</p>
+        <div class="fields">
+          <div><label for="sp-alpha">Acceptance rate α</label><input id="sp-alpha" type="number" value="0.8" min="0" max="0.99" step="0.05"></div>
+          <div><label for="sp-k">Draft length k</label><input id="sp-k" type="number" value="4" min="1" max="16" step="1"></div>
+          <div><label for="sp-cost">Draft cost / token (× target)</label><input id="sp-cost" type="number" value="0.05" min="0" max="1" step="0.01"></div>
+        </div>
+        <div class="readout" id="sp-out"></div>
+        <div class="math" id="sp-math"></div>
+        <button class="btn small" id="sp-run" style="margin-top:18px">🎲 Roll the dice: simulate 12 passes</button>
+        <div id="sp-sim"></div>
+        <p class="note">Assumes the verify pass costs the same as one normal decode step (true at low batch). Try a low α with a large k to see wasted drafting.</p>
+      </div>
+
+      <h2>Where drafts come from</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Method</th><th>How it drafts</th><th>Pros / cons</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Draft model</strong></td><td>Small model from the same family (e.g. 1B drafting for 70B)</td><td>Simple. Needs the same tokenizer and costs extra memory</td></tr>
+          <tr><td><strong>N-gram / prompt lookup</strong></td><td>Copy spans that already appear in the prompt or context</td><td>Free. Great for code edits, RAG and summarization; weak elsewhere</td></tr>
+          <tr><td><strong>Medusa</strong></td><td>Extra decoding heads predict tokens +2, +3… from the last hidden state</td><td>No separate model. Heads need training. Uses tree verification</td></tr>
+          <tr><td><strong>EAGLE (1/2/3)</strong></td><td>Tiny autoregressive head on the target's own features</td><td>High acceptance rates and widely supported. Needs a trained head</td></tr>
+          <tr><td><strong>MTP</strong></td><td>Multi-token-prediction modules trained with the model (e.g. DeepSeek-V3)</td><td>Strong drafts out of the box when the model ships with them</td></tr>
+        </tbody>
+      </table></div>
+      <p><strong>Tree speculation</strong>: instead of one chain of guesses, propose a small <em>tree</em> of alternatives and verify every branch in one pass with a special tree-attention mask. This raises the expected accepted length.</p>
+
+      <h2>When it helps and when it hurts</h2>
+      <ul>
+        <li><strong>Helps most at low batch</strong>, where you're memory-bound and the extra verify tokens are almost free. It's ideal for latency-sensitive, low-concurrency serving.</li>
+        <li><strong>Gains shrink at high batch.</strong> Once you're compute-bound, verifying k extra tokens per sequence costs real FLOPs, and rejected tokens are wasted compute. Some engines lower k or switch speculation off under load.</li>
+        <li><strong>Depends on the domain.</strong> Acceptance rates are higher for predictable text (code, structured output) and lower for creative, high-temperature sampling.</li>
+        <li><strong>Bookkeeping</strong>: rejected tokens' KV entries must be rolled back. The draft model needs its own KV cache. It interacts with CUDA graphs and batching.</li>
+      </ul>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Does speculative decoding change what the model outputs?</summary>
+        <div class="ans"><p>No. With the correct rejection-sampling rule, outputs follow exactly the target model's distribution (and match exactly under greedy decoding, up to floating-point non-determinism).</p></div></details>
+      <details class="quiz"><summary>α = 0.5, k = 8. What is E[tokens]? Is k = 8 a good choice?</summary>
+        <div class="ans"><p>(1 − 0.5⁹)/0.5 ≈ <strong>2.0</strong>. With k=2 you'd already get (1 − 0.5³)/0.5 = 1.75. A long draft wastes effort when α is low, so a shorter k is better here.</p></div></details>
+      <details class="quiz"><summary>Why does speculative decoding help less when the server is heavily loaded?</summary>
+        <div class="ans"><p>At high batch, the forward pass is compute-bound. Verifying extra tokens is no longer free: it adds real FLOPs, which slows down every sequence in the batch.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://arxiv.org/abs/2211.17192" target="_blank" rel="noopener">Fast Inference from Transformers via Speculative Decoding</a> by Leviathan et al.</li>
+        <li><a href="https://arxiv.org/abs/2302.01318" target="_blank" rel="noopener">Accelerating LLM Decoding with Speculative Sampling</a> by Chen et al. (DeepMind)</li>
+        <li><a href="https://arxiv.org/abs/2401.10774" target="_blank" rel="noopener">Medusa</a> · <a href="https://arxiv.org/abs/2401.15077" target="_blank" rel="noopener">EAGLE</a></li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="speculative-decoding" data-level="mid">
+<summary><span class="badge l2">mid</span>Explain speculative decoding and why it doesn't change the output distribution.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>A cheap drafter proposes k tokens and the target verifies all of them in one forward pass, which costs about one decode step when memory-bound. Accept draft token x with probability min(1, p(x)/q(x)). On the first rejection, resample from normalize(max(0, p − q)) and stop. This rejection-sampling scheme provably yields samples from p. Expected tokens per pass = (1 − α^(k+1)) / (1 − α).</p>
+<h4>What they're testing</h4>
+<p>Both the systems intuition and the probability argument.</p>
+<h4>Follow-ups</h4>
+<ul><li>What's the greedy special case?</li><li>What happens to the KV cache for rejected tokens?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="speculative-decoding" data-level="senior">
+<summary><span class="badge l3">senior</span>Speculative decoding made p50 latency better but throughput worse under load. Why, and what would you do?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>At high batch the engine is compute-bound. Verifying k extra tokens per sequence adds real FLOPs, and rejected drafts are pure waste, so total throughput drops. Options: adapt k (or turn speculation off) based on batch size or load; use cheaper drafters (n-gram, EAGLE heads); only speculate for latency-sensitive tiers; and track acceptance rate per workload.</p>
+<h4>What they're testing</h4>
+<p>Knowing when an optimization stops paying off.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which metrics would you put on a dashboard for this?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="speculative-decoding" data-level="junior">
+<summary><span class="badge l1">junior</span>Name three ways to get draft tokens.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>A small draft model from the same family (same tokenizer); n-gram or prompt-lookup copying from the context; extra prediction heads trained on the target (Medusa, EAGLE) or built-in MTP modules (e.g. DeepSeek-V3).</p>
+<h4>What they're testing</h4>
+<p>Breadth.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which would you pick for a code-editing product, and why? (Prompt lookup: edits copy large spans.)</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 3-1 "Speculative Decoding" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="08-speculative-decoding.md">08-speculative-decoding.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/07-quantization.html"><span class="dir">◀ previous · 2-4</span><span class="t">Quantization</span></a><a class="card next" href="../lessons/09-parallelism.html"><span class="dir">next · 3-2 ▶</span><span class="t">Parallelism &amp; MoE Inference</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Prep · InferenceLearn</title>
+  <meta name="description" content="39 inference-engineering interview questions with model answers, what interviewers are testing, and follow-ups: KV cache, batching, FlashAttention, quantization, speculative decoding, parallelism, system design.">
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <link rel="alternate" type="text/markdown" href="interview.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Interview Prep", "description": "Inference-engineering interview questions with model answers, what interviewers look for, and follow-ups.", "url": "interview.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="practice">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// boss rush</span>
+    <h1>Interview Prep</h1>
+    <p>39 questions that come up in inference, ML-systems and LLM-infra interviews. Answer out loud first, then open the card and compare.</p>
+  </section>
+
+  <section class="container prose" style="padding-top:24px">
+    <div class="card" style="margin-bottom:34px;box-shadow:6px 6px 0 var(--lilac)">
+      <h3 style="margin-top:0">How to use this page</h3>
+      <ul>
+        <li><strong>Say your answer before opening the card.</strong> Recognizing an answer is much easier than producing one.</li>
+        <li>Strong answers follow a pattern: <strong>name the bottleneck → do the napkin math → propose a fix → state the trade-off.</strong></li>
+        <li>Levels: <span class="badge l1">junior</span><span class="badge l2">mid</span><span class="badge l3">senior</span><span class="badge l4">staff</span> are rough guides to depth, not hard rules.</li>
+        <li>Practise with an AI: paste this page's link into ChatGPT, Claude or Gemini and ask it to interview you, one question at a time, and grade your answers.</li>
+      </ul>
+    </div>
+
+    <div class="filters" id="iv-filters">
+      <button class="chip on" data-f="all">All levels</button>
+      <button class="chip" data-f="junior">Junior</button>
+      <button class="chip" data-f="mid">Mid</button>
+      <button class="chip" data-f="senior">Senior</button>
+      <button class="chip" data-f="staff">Staff</button>
+      <button class="chip" id="iv-expand">Expand all</button>
+    </div>
+
+    <!-- ============ FUNDAMENTALS ============ -->
+    <div class="iv-section">
+      <h2>Fundamentals</h2>
+
+      <details class="quiz iv" data-level="junior" data-lesson="how-inference-works">
+        <summary><span class="badge l1">junior</span>Walk me through what happens when an LLM serves one request.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Tokenize the prompt. Run <strong>prefill</strong>: one forward pass over all prompt tokens in parallel, which fills the KV cache and produces logits for the first token. Sample a token, stream it back, then loop in <strong>decode</strong>: each step feeds one new token, appends its K/V to the cache, and samples the next, until EOS or max_tokens. Detokenize and stream as you go.</p>
+          <h4>What they're testing</h4>
+          <p>Whether you know the two phases and that decode is a sequential loop. Mentioning the KV cache unprompted is a good sign.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which phase dominates latency for a 2k-in / 500-out chat request? (Decode: 500 sequential steps.)</li><li>Where does the scheduler fit in?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="how-inference-works">
+        <summary><span class="badge l2">mid</span>Why do prefill and decode stress the GPU so differently?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Prefill multiplies the weights by a matrix of N prompt tokens, so each weight byte loaded is reused N times. Arithmetic intensity is high and it's <strong>compute-bound</strong>. Decode multiplies the weights by one vector per sequence, so it's about 1 FLOP per byte at batch 1 and <strong>memory-bandwidth-bound</strong>. Decode also reads the KV cache, which can't be shared across sequences.</p>
+          <h4>What they're testing</h4>
+          <p>The roofline intuition, which most of inference optimization rests on.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How does batching change decode's position on the roofline?</li><li>What is attention's intensity in decode, and why doesn't batching help it?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="junior" data-lesson="how-inference-works">
+        <summary><span class="badge l1">junior</span>Greedy vs temperature vs top-p sampling: when would you use each?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Greedy (T=0) for deterministic tasks such as extraction, classification and code where you want the most likely answer. Temperature 0.7–1.0 with top-p ≈ 0.9–0.95 for creative or chat output. Top-p adapts the candidate set to the model's confidence, while top-k is a fixed cutoff. Mention that sampling has a cost in serving (sorting large vocabularies per sequence), so engines use fused GPU samplers.</p>
+          <h4>What they're testing</h4>
+          <p>Basic decoding knowledge plus some awareness of the systems side.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why can T=0 still be non-deterministic in a batched server?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="gpu-fundamentals">
+        <summary><span class="badge l2">mid</span>Estimate the max single-user tokens/s for a 70B model in FP8 on one H200.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>The weights are ~70 GB in FP8. H200 bandwidth is ~4.8 TB/s, so each step takes ≥ 70 / 4800 s ≈ 14.6 ms, or about <strong>68 tok/s</strong> at the speed of light. Expect ~70–85% of that in practice, and less at long context because KV reads add bytes.</p>
+          <h4>What they're testing</h4>
+          <p>Whether you can do speed-of-light math quickly and know that bandwidth is the limit.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How does this change with TP=2 on two GPUs? (Roughly halves bytes per GPU per step, minus communication overhead.)</li><li>And with batch 64?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="gpu-fundamentals">
+        <summary><span class="badge l3">senior</span>A new GPU doubles FLOPs but only raises bandwidth 1.3×. What happens to LLM serving performance?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Low-batch decode speeds up by only ~1.3× because it's bandwidth-bound. Prefill and large-batch decode can gain up to ~2× if the kernels use the new compute. The ridge point rises (FLOPs ÷ BW goes up ~1.5×), so you need <em>bigger</em> batches to reach compute-bound. That pushes you toward larger batches, lower precision (to cut bytes), speculative decoding (to turn spare FLOPs into tokens), and disaggregation (to put prefill on the compute-rich parts).</p>
+          <h4>What they're testing</h4>
+          <p>Applying roofline reasoning to hardware trends.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which optimizations become <em>more</em> valuable on that GPU?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="junior" data-lesson="metrics">
+        <summary><span class="badge l1">junior</span>Define TTFT, TPOT and throughput. Which matters most for a chatbot vs a batch summarization job?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>TTFT = time to first token (queue + prefill). TPOT = average time per output token after the first. Throughput = total tokens/s across all users. A chatbot cares about TTFT (does it feel responsive?) and a TPOT faster than reading speed. Offline batch jobs care almost only about throughput and cost, so you can use huge batches and accept high latency.</p>
+          <h4>What they're testing</h4>
+          <p>That optimization goals depend on the product.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why report p99 rather than the mean?</li><li>What is goodput?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="metrics">
+        <summary><span class="badge l2">mid</span>How would you benchmark two inference engines fairly?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Same model, precision, hardware and parallelism. A realistic input/output length distribution. Fixed output lengths (ignore_eos) so both engines do the same work. Warm up first. Use open-loop arrivals and sweep the request rate. Measure TTFT/ITL percentiles at the client with streaming. Compare throughput <strong>at equal latency SLOs</strong>, not peak throughput. Control prefix caching. Report versions and flags.</p>
+          <h4>What they're testing</h4>
+          <p>Experimental rigor. Lots of published benchmarks are misleading.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why is closed-loop testing misleading near saturation?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="metrics">
+        <summary><span class="badge l2">mid</span>Your API serves 40 req/s, each ~10 s end to end. How much KV memory do you need for an 8B model (128 KiB/token) at ~2k tokens per request?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Little's law: 40 × 10 = 400 concurrent requests. Each holds ~2k × 128 KiB = 256 MiB of KV, so ~100 GiB in total. That doesn't fit next to the weights on one 80 GB GPU, so you need at least two replicas, more with headroom. Prefix caching or FP8 KV could cut it.</p>
+          <h4>What they're testing</h4>
+          <p>Linking traffic to memory with napkin math.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>What if average output length doubles?</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ MEMORY & BATCHING ============ -->
+    <div class="iv-section">
+      <h2>Memory &amp; batching</h2>
+
+      <details class="quiz iv" data-level="junior" data-lesson="kv-cache">
+        <summary><span class="badge l1">junior</span>What is the KV cache and why does it exist?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>With causal attention, each past token's key and value vectors never change once computed. Caching them means each decode step computes K/V only for the new token and attends over the cache. That turns quadratic recomputation into linear work. The cost is memory that grows with layers × KV heads × head dim × sequence length × batch.</p>
+          <h4>What they're testing</h4>
+          <p>The most fundamental concept in serving.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why aren't queries cached?</li><li>Compute the per-token size for Llama-3-8B.</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="kv-cache">
+        <summary><span class="badge l2">mid</span>Why is serving 128k-token contexts so much more expensive than 4k?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>(1) KV memory grows linearly, so 32× more per sequence and far fewer sequences per GPU, which means lower throughput and higher cost. (2) Every decode step reads the whole cache. At long context, KV bytes can exceed weight bytes, and batching doesn't amortize them. (3) Prefill attention is O(N²) compute, so TTFT grows a lot. (4) Scheduling gets harder: big preemptions and big prefills that stall other users.</p>
+          <h4>What they're testing</h4>
+          <p>A view of all the dimensions of long-context cost.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>What mitigations exist? (GQA/MLA, FP8 KV, prefix caching, context parallelism, sliding windows.)</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="kv-cache">
+        <summary><span class="badge l3">senior</span>You're out of KV memory at your target concurrency. List options in order of what you'd try.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>(1) Check config: <code>gpu-memory-utilization</code>, an over-sized <code>max-model-len</code>, CUDA-graph memory. (2) Enable prefix caching if prompts share prefixes. (3) FP8 KV cache, about 2× capacity with small quality risk, so evaluate it. (4) Quantize the weights to free memory for KV. (5) Add TP to pool memory, or add replicas. (6) Offload cold KV to CPU. (7) Long term, pick a model with a smaller KV footprint (GQA/MLA). Each step trades cost, quality or latency.</p>
+          <h4>What they're testing</h4>
+          <p>Practical prioritization: cheap, safe changes first.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How would you validate that FP8 KV didn't hurt quality?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="junior" data-lesson="batching">
+        <summary><span class="badge l1">junior</span>Explain continuous batching and why it beats static batching.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Static batching runs a fixed batch until its longest sequence finishes, so short sequences leave idle slots and new requests wait. Continuous (iteration-level) batching re-decides the batch every decode step: finished sequences leave immediately and waiting ones join. The GPU stays full, often giving several times more throughput at similar latency. It needs ragged-batch kernels and paged KV memory.</p>
+          <h4>What they're testing</h4>
+          <p>The core scheduling idea behind every modern engine.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>What new problem does it create? (Prefill/decode interference.)</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="batching">
+        <summary><span class="badge l2">mid</span>What is chunked prefill, and how do you tune it?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Split long prompts into chunks and fill each step's token budget with decode tokens first, then a prefill chunk. This stops long prefills from freezing everyone's token stream, and it mixes compute-heavy and memory-heavy work in the same step. The knob is the per-step token budget (e.g. max-num-batched-tokens): smaller gives smoother ITL but slower TTFT for long prompts; larger gives better throughput and TTFT but spikier ITL.</p>
+          <h4>What they're testing</h4>
+          <p>Understanding the latency trade-off, not just the definition.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How does this compare with disaggregation?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="batching">
+        <summary><span class="badge l3">senior</span>Preemption: recompute vs swap. When is each better?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Recompute throws away the victim's KV and re-runs prefill later. Its cost is compute, and prefill is fast and parallel, so it's cheap for short contexts. Swap copies the KV to CPU and back. Its cost is PCIe bandwidth (~tens of GB/s) and CPU memory. For long contexts where recompute is expensive, or on systems with fast CPU–GPU links (e.g. NVLink-C2C), swapping can win. In both cases, frequent preemption means you're over-admitting: fix the admission limits.</p>
+          <h4>What they're testing</h4>
+          <p>Reasoning about costs on different resources.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which sequence would you choose as the victim, and why?</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ ATTENTION & QUANT ============ -->
+    <div class="iv-section">
+      <h2>Attention &amp; quantization</h2>
+
+      <details class="quiz iv" data-level="mid" data-lesson="attention">
+        <summary><span class="badge l2">mid</span>How does FlashAttention work, and is it an approximation?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>It's exact. Naive attention writes the N×N score matrix to HBM and reads it back for softmax and the V product, so it's memory-bound. FlashAttention tiles Q/K/V into SRAM, computes partial scores per tile, and combines them with <strong>online softmax</strong> (running max and sum, rescaling). Only the output goes to HBM. Memory traffic drops from O(N²) to O(N), giving big speedups and allowing long sequences.</p>
+          <h4>What they're testing</h4>
+          <p>IO-awareness, the most important performance idea of recent years.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Derive the online-softmax update.</li><li>What did FA2 and FA3 change?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="attention">
+        <summary><span class="badge l2">mid</span>What problem does PagedAttention solve, and what else does it enable?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Contiguous per-request KV reservations waste memory through over-reservation and fragmentation; the vLLM paper measured 60–80% waste in earlier systems. PagedAttention stores KV in fixed-size blocks mapped by a per-sequence block table, like virtual memory, so waste is under ~4%. It also enables <strong>sharing</strong> via reference counts and copy-on-write: parallel sampling, beam search and prefix caching.</p>
+          <h4>What they're testing</h4>
+          <p>Memory management as a throughput lever.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How does block size affect performance and waste?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="attention">
+        <summary><span class="badge l3">senior</span>Compare MHA, GQA and MLA from a serving perspective.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>MHA has one KV head per query head: the largest cache and the lowest decode-attention intensity. GQA shares KV heads across groups of query heads: g× smaller cache, g× more reuse per byte, and near-MHA quality, which is why it's the default. MLA caches a low-rank latent per token and absorbs the projections at inference: a much smaller cache, but different kernels, and some wrinkles with TP sharding and positional embeddings. All three change how many sequences fit, and so throughput.</p>
+          <h4>What they're testing</h4>
+          <p>Connecting architecture to memory, bandwidth and parallelism.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why does a small number of KV heads limit the tensor-parallel degree?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="quantization">
+        <summary><span class="badge l2">mid</span>W4A16 vs W8A8 (FP8): when would you choose each?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>W4A16 cuts weight bytes 4× and is ideal for memory-bound, low-batch serving or fitting big models on small GPUs. The math still runs in BF16 with dequantization overhead, so it can lose at high batch. W8A8 (FP8 on Hopper) halves bytes <em>and</em> uses faster FP8 tensor cores, so it helps prefill and high-batch throughput too, and it's usually near-lossless. Rule of thumb: FP8 for throughput serving on modern GPUs; INT4 weight-only for latency at low concurrency or tight memory.</p>
+          <h4>What they're testing</h4>
+          <p>Matching quantization to the bottleneck.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Where would FP8 KV cache fit in?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="quantization">
+        <summary><span class="badge l3">senior</span>Why are activations harder to quantize than weights, and how do people deal with it?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Activations vary per input and contain systematic outlier channels 10–100× larger than the rest. Per-tensor INT8 scaling then crushes the normal values. Fixes: mixed precision for outliers (LLM.int8), SmoothQuant (migrate scale into the weights), per-token dynamic scales, rotations (QuaRot/SpinQuant) to spread outliers, and FP8, whose exponent handles range better than INT8.</p>
+          <h4>What they're testing</h4>
+          <p>Depth beyond "just use INT8".</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Static vs dynamic activation scales: what's the trade-off?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="quantization">
+        <summary><span class="badge l2">mid</span>How would you decide a quantized model is safe to ship?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Perplexity as a smoke test only. Then task evals matching the product (knowledge, math, code, long-context retrieval, multilingual if relevant) plus a domain eval set. Side-by-side human or LLM-judge comparisons on real traffic samples. Check the tails: math and code break first. Measure the actual speed and cost gain at the production batch size. Then canary-deploy with quality metrics.</p>
+          <h4>What they're testing</h4>
+          <p>Evaluation discipline.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>A 0.5% MMLU drop: ship or not? (Depends on the product and what it saves.)</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ DECODING & DISTRIBUTED ============ -->
+    <div class="iv-section">
+      <h2>Speculative decoding &amp; parallelism</h2>
+
+      <details class="quiz iv" data-level="mid" data-lesson="speculative-decoding">
+        <summary><span class="badge l2">mid</span>Explain speculative decoding and why it doesn't change the output distribution.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>A cheap drafter proposes k tokens and the target verifies all of them in one forward pass, which costs about one decode step when memory-bound. Accept draft token x with probability min(1, p(x)/q(x)). On the first rejection, resample from normalize(max(0, p − q)) and stop. This rejection-sampling scheme provably yields samples from p. Expected tokens per pass = (1 − α^(k+1)) / (1 − α).</p>
+          <h4>What they're testing</h4>
+          <p>Both the systems intuition and the probability argument.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>What's the greedy special case?</li><li>What happens to the KV cache for rejected tokens?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="speculative-decoding">
+        <summary><span class="badge l3">senior</span>Speculative decoding made p50 latency better but throughput worse under load. Why, and what would you do?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>At high batch the engine is compute-bound. Verifying k extra tokens per sequence adds real FLOPs, and rejected drafts are pure waste, so total throughput drops. Options: adapt k (or turn speculation off) based on batch size or load; use cheaper drafters (n-gram, EAGLE heads); only speculate for latency-sensitive tiers; and track acceptance rate per workload.</p>
+          <h4>What they're testing</h4>
+          <p>Knowing when an optimization stops paying off.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which metrics would you put on a dashboard for this?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="junior" data-lesson="speculative-decoding">
+        <summary><span class="badge l1">junior</span>Name three ways to get draft tokens.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>A small draft model from the same family (same tokenizer); n-gram or prompt-lookup copying from the context; extra prediction heads trained on the target (Medusa, EAGLE) or built-in MTP modules (e.g. DeepSeek-V3).</p>
+          <h4>What they're testing</h4>
+          <p>Breadth.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which would you pick for a code-editing product, and why? (Prompt lookup: edits copy large spans.)</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="parallelism">
+        <summary><span class="badge l2">mid</span>Tensor vs pipeline parallelism for inference: trade-offs?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>TP splits each layer across GPUs. It cuts per-token latency, since each GPU reads 1/N of the weights, but needs two all-reduces per layer, so it wants NVLink within a node. PP splits layers into stages, with cheap point-to-point communication that works across nodes. It doesn't reduce single-token latency and needs many micro-batches to avoid bubbles. The usual setup is TP inside a node and PP across nodes, then data-parallel replicas for throughput.</p>
+          <h4>What they're testing</h4>
+          <p>Understanding which parallelism reduces latency and which only adds capacity.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why does TP stop scaling well beyond 8 GPUs?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="parallelism">
+        <summary><span class="badge l3">senior</span>What makes serving large MoE models hard?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Memory scales with total parameters but compute with active ones, so you need lots of memory and little compute per token. At high batch, nearly all experts are touched every step, so weight reads aren't small anymore. Expert parallelism needs all-to-all dispatch and combine, which is latency-sensitive. Load imbalance creates hot experts and stragglers. Fixes include wide EP with attention data parallelism, redundant hot experts, specialized all-to-all kernels, grouped GEMMs, and overlapping communication with compute.</p>
+          <h4>What they're testing</h4>
+          <p>Current frontier knowledge.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why might you pair attention data parallelism with expert parallelism?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="staff" data-lesson="parallelism">
+        <summary><span class="badge l4">staff</span>Estimate the tensor-parallel all-reduce traffic per decode step for a 70B dense model, batch 64, TP=8.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>With hidden size ~8192 and 80 layers, there are 2 all-reduces per layer, each on a [64 × 8192] BF16 tensor = 1 MiB. That's 160 all-reduces of ~1 MiB per step, and a ring all-reduce moves ~2·(N−1)/N × size per GPU ≈ 1.75 MiB each, so ~280 MiB per GPU per step. At ~450 GB/s effective NVLink that's ~0.6 ms of bandwidth time. But 160 small collectives each carry latency (tens of µs), so <strong>latency, not bandwidth,</strong> often dominates. Hence fused all-reduce kernels, overlap, and custom one-shot all-reduce for small messages.</p>
+          <h4>What they're testing</h4>
+          <p>Quantitative distributed-systems reasoning.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How does this change for prefill with 8k tokens?</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ SERVING SYSTEMS ============ -->
+    <div class="iv-section">
+      <h2>Serving systems</h2>
+
+      <details class="quiz iv" data-level="mid" data-lesson="prefix-caching">
+        <summary><span class="badge l2">mid</span>How would you implement prefix caching in a paged-KV engine?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Give each full block a key = hash(parent key, the block's token IDs, extras like LoRA ID). Keep a hash → physical-block map. On a new request, hash the prompt block by block, reuse the longest run of hits (incrementing ref counts), and prefill from there. When a request finishes, its blocks go to an evictable LRU list rather than being freed. Evict only blocks with ref count 0, leaves first. The alternative is a radix tree (SGLang) for token-level matching.</p>
+          <h4>What they're testing</h4>
+          <p>Data-structure design under memory pressure.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How do you handle a partially filled last block?</li><li>Hash collisions?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="prefix-caching">
+        <summary><span class="badge l3">senior</span>You run 20 replicas behind a round-robin load balancer and prefix-cache hit rates are poor. What do you change?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Round-robin scatters each conversation across replicas, so caches never warm up. Move to cache-aware routing: session affinity (hash the conversation ID) as a cheap first step, then a KV-aware router that scores replicas on predicted prefix overlap minus current load, to avoid hotspots. Also fix the prompt template so static content comes first, and consider a shared or offloaded KV tier.</p>
+          <h4>What they're testing</h4>
+          <p>Seeing the system as a whole beyond one engine.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How do you measure success? (Hit rate, TTFT and GPU prefill time per request.)</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="disaggregation">
+        <summary><span class="badge l3">senior</span>When is prefill/decode disaggregation worth it, and what does it cost?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>It's worth it at scale with strict, separate TTFT and ITL SLOs, long prompts, or very different prefill and decode loads. Separate pools remove interference and can be scaled and configured independently. Costs: KV transfer bandwidth (e.g. ~640 MB for 2k tokens on a 70B GQA model, needing RDMA or NVLink), extra operational complexity, new failure modes, and possible stranded capacity if the pool ratio is wrong. For small deployments, chunked prefill on one pool is usually enough.</p>
+          <h4>What they're testing</h4>
+          <p>Judging when an architecture pays off.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How would you choose the prefill:decode GPU ratio?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="disaggregation">
+        <summary><span class="badge l2">mid</span>What signals would you autoscale an LLM service on?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Queue depth or waiting requests, KV-cache utilization, TTFT/ITL percentiles against the SLO, and tokens/s against benchmarked capacity. Not CPU, and not raw nvidia-smi utilization. Account for slow cold starts (weights, compilation, graph capture) with warm pools, local weight caches and predictive scaling.</p>
+          <h4>What they're testing</h4>
+          <p>Production operations knowledge.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How do you scale down without dropping streams? (Graceful drain.)</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="staff" data-lesson="disaggregation">
+        <summary><span class="badge l4">staff</span>Design a scheduler that serves interactive and batch traffic on the same GPUs.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Use priority classes: interactive requests are admitted first and their decodes always get budget, with a guaranteed TTFT/ITL target. Batch requests fill leftover token budget and are preemptible (recompute preferred, since they're latency-tolerant). Use admission control per class, fairness across tenants within a class (token-based fair queueing), and maybe a different speculation policy per class. Monitor goodput for interactive traffic and throughput and cost for batch. Scale on interactive SLO signals and let batch traffic soak up idle capacity.</p>
+          <h4>What they're testing</h4>
+          <p>Policy design with competing objectives.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>How do you prevent starvation of batch jobs?</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ KERNELS & PRODUCTION ============ -->
+    <div class="iv-section">
+      <h2>Kernels &amp; production</h2>
+
+      <details class="quiz iv" data-level="mid" data-lesson="kernels">
+        <summary><span class="badge l2">mid</span>What are CUDA graphs and why do inference engines use them?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>They record a sequence of kernel launches with fixed shapes and addresses, then replay it with one launch. Small-batch decode steps are short (milliseconds) but launch hundreds of kernels, so CPU launch overhead can rival GPU time. Graphs remove it. Engines capture one graph per batch-size bucket and pad up, mostly for decode. The costs are capture time, memory, and rigid shapes.</p>
+          <h4>What they're testing</h4>
+          <p>Understanding CPU vs GPU overheads.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Why aren't graphs typically used for prefill?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="kernels">
+        <summary><span class="badge l2">mid</span>Give an example of kernel fusion in an LLM and explain the speedup.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>SwiGLU: silu(gate) × up. Unfused, it's separate kernels that each read and write the full [tokens × 14336] tensors to HBM. Fused, it's one read of each input and one write of the output. Elementwise work is memory-bound, so time drops roughly in proportion to the bytes saved, plus launches. Other examples: RMSNorm+residual(+FP8 quant), rotary fused into attention, dequant fused into GEMM.</p>
+          <h4>What they're testing</h4>
+          <p>Bytes-moved reasoning at the kernel level.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Sketch that kernel in Triton.</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="kernels">
+        <summary><span class="badge l3">senior</span>A decode step takes 2× longer than your speed-of-light estimate. How do you find out why?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>First check the estimate itself: include KV bytes at the actual context lengths and the communication. Then take an Nsight Systems trace and look for gaps between kernels (CPU-bound: scheduling, sampling sync, Python, missing CUDA graphs), many tiny kernels (missing fusion), and slow collectives. Then use Nsight Compute on the top kernels for achieved bandwidth vs peak, occupancy and wave quantization. Compute MBU per kernel class and fix the biggest gap first.</p>
+          <h4>What they're testing</h4>
+          <p>A systematic performance-debugging method.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which GEMM shapes in decode tend to underutilize the GPU?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="mid" data-lesson="production">
+        <summary><span class="badge l2">mid</span>p99 latency doubled after a deploy. Walk me through the investigation.</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Is it TTFT or ITL? Check queue depth and running sequences (a capacity problem?), KV usage and preemptions, and prefix-cache hit rate (did a prompt template change?). Diff the deploy: engine version, flags (token budget, max seqs, speculation), model or precision. Check the traffic mix (longer prompts?). Look for hardware issues (a straggler GPU, throttling). Roll back if the SLO is breached, then bisect.</p>
+          <h4>What they're testing</h4>
+          <p>Calm, data-driven incident response.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>Which three dashboards do you open first?</li></ul>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="senior" data-lesson="production">
+        <summary><span class="badge l3">senior</span>How do you plan capacity for a new LLM feature?</summary>
+        <div class="ans">
+          <h4>Strong answer</h4>
+          <p>Gather peak req/s, input and output length distributions, and SLOs. Napkin math: token demand, Little's-law concurrency, KV memory, and whether the model fits with headroom. Benchmark one replica on realistic data and find the knee where p90 still meets the SLO. Replicas = demand ÷ knee capacity, plus headroom for spikes, failures and deploys (N+1, ~30%). Validate with an open-loop load test at 1.5× peak, then set autoscaling signals.</p>
+          <h4>What they're testing</h4>
+          <p>Turning product requirements into infrastructure.</p>
+          <h4>Follow-ups</h4>
+          <ul><li>What changes if 60% of the input tokens are a shared system prompt?</li></ul>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ SYSTEM DESIGN ============ -->
+    <div class="iv-section">
+      <h2>System design (open-ended)</h2>
+
+      <details class="quiz iv" data-level="staff" data-lesson="production">
+        <summary><span class="badge l4">staff</span>Design an API that serves a 70B chat model at 500 req/s with p90 TTFT &lt; 1 s and TPOT &lt; 40 ms.</summary>
+        <div class="ans">
+          <h4>A strong structure</h4>
+          <ul>
+            <li><strong>Requirements:</strong> lengths (say 2k in / 400 out), streaming, multi-tenancy, availability target.</li>
+            <li><strong>Napkin math:</strong> 500 × 400 = 200k output tok/s. Concurrency ≈ 500 × (~1 + 400×0.035 ≈ 15 s) ≈ 7,500 sequences. KV ≈ 7,500 × 2.4k tokens × 320 KiB ≈ 5.5 TiB, so hundreds of GPUs. FP8 weights and KV halve it.</li>
+            <li><strong>Replica design:</strong> FP8, TP=4 or 8 on H100/H200 nodes, continuous batching with chunked prefill, prefix caching, CUDA graphs. Benchmark the knee per replica.</li>
+            <li><strong>Fleet:</strong> KV/prefix-aware router, autoscaling on queue depth and SLOs, warm pools, multi-region.</li>
+            <li><strong>At this scale, consider:</strong> P/D disaggregation, speculative decoding for the latency tier.</li>
+            <li><strong>Operations:</strong> rate limits, max-token caps, cancellation, observability, canaries, rollback.</li>
+          </ul>
+          <h4>What they're testing</h4>
+          <p>Driving a design from numbers, and making trade-offs explicit.</p>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="staff" data-lesson="prefix-caching">
+        <summary><span class="badge l4">staff</span>Design serving for a RAG product: 30k-token prompts (mostly retrieved docs), short answers.</summary>
+        <div class="ans">
+          <h4>A strong structure</h4>
+          <ul>
+            <li><strong>Prefill-dominated:</strong> TTFT and prefill compute are the cost drivers, not decode.</li>
+            <li><strong>Reuse:</strong> cache KV for popular documents. Order prompts as [system][docs sorted by a stable ID][question]. Use a KV offload tier (CPU/SSD) for document caches. Route on document overlap.</li>
+            <li><strong>Compute:</strong> FP8 prefill, high-TP or disaggregated prefill pools, chunked prefill so the few decoders aren't starved.</li>
+            <li><strong>Memory:</strong> long KV per request but short lifetimes. Size the pool for burst concurrency.</li>
+            <li><strong>Product lever:</strong> retrieve fewer and better chunks. The cheapest token is the one you never send.</li>
+          </ul>
+          <h4>What they're testing</h4>
+          <p>Recognizing the workload shape and optimizing for it.</p>
+        </div>
+      </details>
+
+      <details class="quiz iv" data-level="staff" data-lesson="production">
+        <summary><span class="badge l4">staff</span>Design a platform where 1,000 customers each have their own fine-tuned variant of one 8B base model.</summary>
+        <div class="ans">
+          <h4>A strong structure</h4>
+          <ul>
+            <li>Don't deploy 1,000 full models. Use <strong>LoRA adapters</strong> on a shared base with multi-LoRA batching (kernels that apply different adapters per sequence in one batch).</li>
+            <li>Keep adapters in GPU memory with LRU caching, a CPU/SSD tier behind it, and preloading for hot tenants.</li>
+            <li>Prefix-cache keys must include the adapter ID.</li>
+            <li>Routing: send a tenant's requests to replicas with the adapter loaded, balanced against load.</li>
+            <li>Per-tenant fairness, rate limits and usage metering. Isolation for noisy neighbours.</li>
+            <li>Trade-off: high-rank adapters or full fine-tunes for the top customers might justify dedicated replicas.</li>
+          </ul>
+          <h4>What they're testing</h4>
+          <p>Multi-tenancy, caching hierarchies and cost awareness.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="grid grid-2">
+      <a class="card" href="practice.html#arcade"><span class="badge pink">play</span><h3>Quiz Arcade ▶</h3><p class="muted" style="font-size:13.5px;margin:0">Rapid-fire multiple choice to lock in the facts.</p></a>
+      <a class="card" href="workbook.html"><span class="badge l2">think</span><h3>Workbook ▶</h3><p class="muted" style="font-size:13.5px;margin:0">Practise the napkin math these answers rely on.</p></a>
+    </div>
+    <div data-ai-box></div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

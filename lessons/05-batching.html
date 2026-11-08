@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batching: Static to Continuous · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Static, dynamic and continuous batching, plus chunked prefill.">
+  <link rel="alternate" type="text/markdown" href="05-batching.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Batching: Static → Continuous", "description": "Static, dynamic and continuous batching, plus chunked prefill.", "learningResourceType": "lesson", "educationalLevel": "Core Techniques", "timeRequired": "PT30M", "teaches": ["Why batching helps", "Static & dynamic", "Continuous batching", "Chunked prefill"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/05-batching.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="batching">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 2 Core Techniques / 2-2</div><span class="badge l2">WORLD 2</span><span class="badge">Lesson 2-2</span><span class="badge">~30 min read</span><!--/B:meta--></div>
+      <h1>Batching: Static → Continuous</h1>
+      <p class="lede">Decode is memory-bound: the GPU reads all the weights to produce one token per sequence. Batching makes those reads serve many sequences at once. How you batch makes a 10×+ difference in throughput.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Explain why batching boosts throughput with little latency cost</li>
+          <li>Compare static, dynamic and continuous (iteration-level) batching</li>
+          <li>Describe prefill/decode interference and how <strong>chunked prefill</strong> fixes it</li>
+          <li>Tune the main scheduler knobs in a real engine</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-static-batching">Static batching</a></dt><dd>Form a batch, pad it, and run until every sequence finishes. Simple but wasteful.</dd></div><div><dt><a href="../vocabulary.html#v-dynamic-batching">Dynamic batching</a></dt><dd>Wait a short window or until the batch is full, then run. Good for fixed-cost models, but still request-level.</dd></div><div><dt><a href="../vocabulary.html#v-continuous-batching">Continuous batching</a></dt><dd>Iteration-level scheduling: sequences join and leave the running batch at every decode step. Also called in-flight batching.</dd></div><div><dt><a href="../vocabulary.html#v-ragged-batch">Ragged batch</a></dt><dd>A batch whose sequences have different lengths, packed without padding. Kernels get per-sequence offsets.</dd></div><div><dt><a href="../vocabulary.html#v-head-of-line-blocking">Head-of-line blocking</a></dt><dd>New work stuck waiting behind slow work already in progress.</dd></div><div><dt><a href="../vocabulary.html#v-chunked-prefill">Chunked prefill</a></dt><dd>Splitting a long prompt's prefill into chunks that share engine steps with running decodes, so token streams don't freeze.</dd></div><div><dt><a href="../vocabulary.html#v-token-budget">Token budget</a></dt><dd>The maximum number of tokens (prefill chunks plus decodes) processed in one engine step, e.g. vLLM's max-num-batched-tokens.</dd></div><div><dt><a href="../vocabulary.html#v-preemption">Preemption</a></dt><dd>Evicting a running sequence when KV memory runs out, then recomputing or swapping its cache in later.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>Why batching helps</h2>
+      <p>From lesson 1-2: a linear layer's arithmetic intensity ≈ batch size. At B=1, an H100 runs at well under 1% of peak FLOPs during decode. Put 64 sequences in the batch and the GPU reads the weights <strong>once</strong> and does 64× the useful work. The step takes barely longer, because we're still memory-bound.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Batch</th><th>Step time (illustrative, 8B on H100)</th><th>System tok/s</th><th>Per-user tok/s</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>~6 ms</td><td>~170</td><td>~170</td></tr>
+          <tr><td>16</td><td>~7 ms</td><td>~2,300</td><td>~145</td></tr>
+          <tr><td>64</td><td>~9 ms</td><td>~7,000</td><td>~110</td></tr>
+          <tr><td>256</td><td>~20 ms</td><td>~12,800</td><td>~50</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted" style="font-size:13px">Numbers are illustrative, to show the shape of the curve. Measure your own setup.</p>
+
+      <h2>Static batching</h2>
+      <p>The simplest approach: collect N requests, pad them to the same length, and run them together until <em>all</em> are done. This is what you get from calling <code>model.generate()</code> on a padded batch.</p>
+      <ul>
+        <li><strong>Padding waste</strong>: short prompts are padded up to the longest one.</li>
+        <li><strong>Straggler problem</strong>: if one sequence generates 2,000 tokens and the rest stop at 20, those slots sit idle for 1,980 steps.</li>
+        <li><strong>Head-of-line blocking</strong>: new requests wait for the whole batch to finish before they can start.</li>
+      </ul>
+
+      <h2>Dynamic batching</h2>
+      <p>A request-level improvement used by general model servers (e.g. Triton Inference Server): wait up to a small time window (say 5 ms) or until the batch is full, then run. Great for fixed-cost models like classifiers and embedding models. For generative LLMs it still has the straggler problem, because the batch only "ends" when its slowest member ends.</p>
+
+      <h2>Continuous batching</h2>
+      <p><strong>Continuous batching</strong> (also called iteration-level scheduling or in-flight batching) was introduced by the Orca paper (OSDI 2022). The scheduler decides who's in the batch at <strong>every decode step</strong>:</p>
+      <ul>
+        <li>When a sequence finishes (EOS or max tokens), it leaves <em>immediately</em> and frees its slot and KV memory.</li>
+        <li>A waiting request joins at the very next step: its prefill runs and it starts decoding.</li>
+        <li>The batch stays full, so the GPU stays busy.</li>
+      </ul>
+      <p>To make this work, the engine needs attention kernels that handle <strong>ragged batches</strong> (different sequence lengths with no padding) and flexible KV memory (paging, lesson 2-3). Every modern engine (vLLM, SGLang, TensorRT-LLM, TGI) does it.</p>
+
+      <div class="widget" id="batch-sim">
+        <h4>▶ Batching simulator</h4>
+        <p class="intro">Each row is a GPU slot and each column is one decode step. Each colour is one request, labelled with how many tokens it needs. Striped cells are <strong>wasted</strong> slots. Press <strong>▶ Play</strong> to watch both schedulers race, then change the slots and request count.</p>
+        <div class="sim-controls">
+          <div><label for="sim-slots">GPU slots: <span class="range-v" id="sim-slots-v">4</span></label><input id="sim-slots" type="range" min="2" max="8" value="4"></div>
+          <div><label for="sim-n">Requests: <span class="range-v" id="sim-n-v">12</span></label><input id="sim-n" type="range" min="4" max="24" value="12"></div>
+          <div><button class="btn small" id="sim-play">▶ Play</button><button class="btn small alt" id="sim-shuffle">Shuffle</button></div>
+        </div>
+        <div id="sim-reqs" style="margin:10px 0"></div>
+        <div id="sim-static"></div>
+        <div id="sim-cont"></div>
+        <div id="sim-verdict"></div>
+        <p class="note">Simplified: one token per step, prefill is ignored, and all requests arrive at t=0. In static batching, results return when the whole batch completes.</p>
+      </div>
+
+<pre><code><span class="c"># the heart of a continuous-batching scheduler (simplified)</span>
+<span class="k">while True</span>:
+    <span class="c"># 1) admit new requests while there's room (slots + KV blocks)</span>
+    <span class="k">while</span> waiting <span class="k">and</span> len(running) &lt; MAX_SEQS <span class="k">and</span> kv.can_allocate(waiting[<span class="n">0</span>]):
+        req = waiting.popleft()
+        kv.allocate(req)
+        running.append(req)            <span class="c"># its prefill runs this step</span>
+
+    <span class="c"># 2) one model step over the ragged batch: prefills + one decode token each</span>
+    new_tokens = model.step(running)
+
+    <span class="c"># 3) retire finished sequences immediately</span>
+    <span class="k">for</span> req, tok <span class="k">in</span> zip(running, new_tokens):
+        req.append(tok); stream_to_client(req, tok)
+    <span class="k">for</span> req <span class="k">in</span> [r <span class="k">for</span> r <span class="k">in</span> running <span class="k">if</span> r.finished]:
+        running.remove(req); kv.free(req)</code></pre>
+
+      <h2>Prefill/decode interference</h2>
+      <p>Continuous batching adds a new problem. When a request with a 16k-token prompt joins, its prefill takes hundreds of milliseconds, and <strong>every running sequence's decode stalls</strong> for that long. Users see the stream freeze (an ITL spike), while the new request's TTFT is still long.</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">no chunking</span><span class="blk b"></span><span class="blk b"></span><span class="blk p wide">  BIG PREFILL (decodes stall)  </span><span class="blk b"></span><span class="blk b"></span></div>
+        <div class="blkrow"><span class="lbl">chunked</span><span class="blk b"></span><span class="blk b"></span><span class="blk p">¼</span><span class="blk b"></span><span class="blk p">¼</span><span class="blk b"></span><span class="blk p">¼</span><span class="blk b"></span><span class="blk p">¼</span><span class="blk b"></span></div>
+        <div class="cap">blue = decode steps · pink = prefill work. Chunks ride along with decodes, so streams keep flowing</div>
+      </div>
+
+      <h2>Chunked prefill</h2>
+      <p><strong>Chunked prefill</strong> (popularized by Sarathi-Serve) splits long prompts into chunks of, say, 512–2,048 tokens. Each engine step has a fixed <strong>token budget</strong>. The scheduler first fills it with one decode token per running sequence, then tops it up with a chunk of pending prefill.</p>
+      <ul>
+        <li>Decodes keep flowing, so ITL stays steady.</li>
+        <li>Each step mixes a compute-heavy prefill chunk with memory-bound decodes. That uses <em>both</em> the compute and the bandwidth.</li>
+        <li>Trade-off: a single long prompt's TTFT goes up a little, because its prefill is spread over several steps.</li>
+      </ul>
+      <div class="callout tip"><span class="tag">REAL KNOBS</span>
+        <p>In vLLM: <code>--max-num-seqs</code> (max concurrent sequences), <code>--max-num-batched-tokens</code> (per-step token budget, which is the chunk size control), and <code>--enable-chunked-prefill</code> (on by default in recent versions). A larger token budget favors throughput and TTFT. A smaller one favors smooth ITL.</p>
+      </div>
+
+      <h2>When memory runs out: preemption</h2>
+      <p>Sequences grow one token at a time, so the engine can run out of KV blocks in the middle of generation. Then it has to <strong>preempt</strong> some sequences:</p>
+      <ul>
+        <li><strong>Recompute</strong>: drop the victim's KV and re-prefill it later. Cheap when prompts are short, and it's vLLM's default.</li>
+        <li><strong>Swap</strong>: copy the KV to CPU memory and copy it back later. Limited by PCIe bandwidth.</li>
+      </ul>
+      <p>Frequent preemption is a sign that <code>max-num-seqs</code> is set too high for your memory. Engines expose a preemption counter metric: watch it.</p>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Why doesn't dynamic batching fix the straggler problem for LLMs?</summary>
+        <div class="ans"><p>It decides the batch once, at the request level. Once formed, the batch runs until its longest generation finishes, so finished slots can't be refilled until then.</p></div></details>
+      <details class="quiz"><summary>What must an attention kernel support for continuous batching to work without padding?</summary>
+        <div class="ans"><p>Variable-length ("ragged") sequences in one batch, typically by passing sequence-start offsets and per-sequence KV block tables instead of a dense padded tensor.</p></div></details>
+      <details class="quiz"><summary>Your p99 ITL spikes whenever long prompts arrive. What's the first knob to try?</summary>
+        <div class="ans"><p>Make sure chunked prefill is on and <strong>lower the per-step token budget</strong> (e.g. <code>max-num-batched-tokens</code>), so prefill chunks are smaller and decodes get scheduled more often.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank" rel="noopener">Orca: A Distributed Serving System for Transformer-Based Generative Models</a> (OSDI '22)</li>
+        <li><a href="https://www.anyscale.com/blog/continuous-batching-llm-inference" target="_blank" rel="noopener">How continuous batching enables 23× throughput in LLM inference</a> (Anyscale)</li>
+        <li><a href="https://arxiv.org/abs/2403.02310" target="_blank" rel="noopener">Sarathi-Serve: Taming Throughput-Latency Tradeoff</a> (chunked prefill)</li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="batching" data-level="junior">
+<summary><span class="badge l1">junior</span>Explain continuous batching and why it beats static batching.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Static batching runs a fixed batch until its longest sequence finishes, so short sequences leave idle slots and new requests wait. Continuous (iteration-level) batching re-decides the batch every decode step: finished sequences leave immediately and waiting ones join. The GPU stays full, often giving several times more throughput at similar latency. It needs ragged-batch kernels and paged KV memory.</p>
+<h4>What they're testing</h4>
+<p>The core scheduling idea behind every modern engine.</p>
+<h4>Follow-ups</h4>
+<ul><li>What new problem does it create? (Prefill/decode interference.)</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="batching" data-level="mid">
+<summary><span class="badge l2">mid</span>What is chunked prefill, and how do you tune it?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Split long prompts into chunks and fill each step's token budget with decode tokens first, then a prefill chunk. This stops long prefills from freezing everyone's token stream, and it mixes compute-heavy and memory-heavy work in the same step. The knob is the per-step token budget (e.g. max-num-batched-tokens): smaller gives smoother ITL but slower TTFT for long prompts; larger gives better throughput and TTFT but spikier ITL.</p>
+<h4>What they're testing</h4>
+<p>Understanding the latency trade-off, not just the definition.</p>
+<h4>Follow-ups</h4>
+<ul><li>How does this compare with disaggregation?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="batching" data-level="senior">
+<summary><span class="badge l3">senior</span>Preemption: recompute vs swap. When is each better?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Recompute throws away the victim's KV and re-runs prefill later. Its cost is compute, and prefill is fast and parallel, so it's cheap for short contexts. Swap copies the KV to CPU and back. Its cost is PCIe bandwidth (~tens of GB/s) and CPU memory. For long contexts where recompute is expensive, or on systems with fast CPU–GPU links (e.g. NVLink-C2C), swapping can win. In both cases, frequent preemption means you're over-admitting: fix the admission limits.</p>
+<h4>What they're testing</h4>
+<p>Reasoning about costs on different resources.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which sequence would you choose as the victim, and why?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 2-2 "Batching: Static → Continuous" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="05-batching.md">05-batching.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/04-kv-cache.html"><span class="dir">◀ previous · 2-1</span><span class="t">The KV Cache</span></a><a class="card next" href="../lessons/06-attention.html"><span class="dir">next · 2-3 ▶</span><span class="t">Attention Optimizations</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

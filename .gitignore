@@ -1,0 +1,16 @@
+# Editor / tool folders (not part of the website)
+.vscode/
+.qodo/
+.code-review-graph/
+
+# Python cache from tools/build.py
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary screenshot test files
+__shot_*.html

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parallelism &amp; MoE Inference · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Tensor, pipeline, data, expert and context parallelism.">
+  <link rel="alternate" type="text/markdown" href="09-parallelism.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Parallelism & MoE Inference", "description": "Tensor, pipeline, data, expert and context parallelism.", "learningResourceType": "lesson", "educationalLevel": "Advanced", "timeRequired": "PT35M", "teaches": ["Tensor parallel", "Pipeline parallel", "Expert parallel & MoE", "Context parallel"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/09-parallelism.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="parallelism">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 3 Advanced / 3-2</div><span class="badge l3">WORLD 3</span><span class="badge">Lesson 3-2</span><span class="badge">~35 min read</span><!--/B:meta--></div>
+      <h1>Parallelism &amp; MoE Inference</h1>
+      <p class="lede">When a model doesn't fit on one GPU, or one GPU isn't fast enough, you split the work. Each way of splitting trades communication for memory, latency or throughput, and the right mix depends on your model and your interconnect.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Describe tensor, pipeline, data, expert and context parallelism</li>
+          <li>Say which ones reduce latency and which only add throughput</li>
+          <li>Reason about communication costs and interconnects</li>
+          <li>Explain the special memory/compute profile of Mixture-of-Experts models</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-tensor-parallelism-tp">Tensor parallelism (TP)</a></dt><dd>Splits each layer's weight matrices across GPUs, with all-reduces per layer. Lowers per-token latency.</dd></div><div><dt><a href="../vocabulary.html#v-pipeline-parallelism-pp">Pipeline parallelism (PP)</a></dt><dd>Splits a model by layers across GPUs. Works across nodes, but doesn't make a single token faster.</dd></div><div><dt><a href="../vocabulary.html#v-pipeline-bubble">Pipeline bubble</a></dt><dd>Idle time in pipeline stages while waiting for work. It's reduced by keeping several micro-batches in flight.</dd></div><div><dt><a href="../vocabulary.html#v-data-parallelism-dp">Data parallelism (DP)</a></dt><dd>Independent model replicas with requests load-balanced across them. Scales throughput.</dd></div><div><dt><a href="../vocabulary.html#v-expert-parallelism-ep">Expert parallelism (EP)</a></dt><dd>Places different MoE experts on different GPUs and routes tokens to them with all-to-all communication.</dd></div><div><dt><a href="../vocabulary.html#v-moe">MoE</a></dt><dd>Mixture of Experts: a router sends each token to a few of many expert MLPs. Total parameters ≫ active parameters.</dd></div><div><dt><a href="../vocabulary.html#v-router-gating">Router (gating)</a></dt><dd>The small network in an MoE layer that picks the top-k experts for each token.</dd></div><div><dt><a href="../vocabulary.html#v-all-reduce">All-reduce</a></dt><dd>A collective operation that sums tensors across GPUs and gives everyone the result. TP needs two per transformer layer.</dd></div><div><dt><a href="../vocabulary.html#v-all-to-all">All-to-all</a></dt><dd>A collective where every GPU sends a different chunk to every other GPU. Used for MoE token dispatch.</dd></div><div><dt><a href="../vocabulary.html#v-nvlink">NVLink</a></dt><dd>NVIDIA's high-bandwidth GPU-to-GPU link (~900 GB/s per GPU on H100). Essential for fast tensor parallelism.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>Why go multi-GPU?</h2>
+      <ul>
+        <li><strong>Capacity</strong>: a 405B model in BF16 is ~810 GB, more than any single GPU holds.</li>
+        <li><strong>Latency</strong>: decode speed ≈ bandwidth. Split the weights over 8 GPUs and you have ~8× the aggregate bandwidth for each token.</li>
+        <li><strong>Throughput</strong>: more total memory means more KV cache, bigger batches and more users.</li>
+      </ul>
+
+      <h2>Tensor parallelism (TP)</h2>
+      <p>Split <em>each layer's</em> weight matrices across GPUs (Megatron-LM style). In an MLP block, the first matrix is split by <strong>columns</strong> and the second by <strong>rows</strong>. Each GPU computes its slice independently, and one <strong>all-reduce</strong> sums the partial outputs at the end. Attention is split by heads in the same way.</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">GPU 0</span><span class="blk wide p">W₁[:, 0:¼]</span><span class="blk wide b">W₂[0:¼, :]</span><span class="blk wide y">partial Y</span></div>
+        <div class="blkrow"><span class="lbl">GPU 1</span><span class="blk wide p">W₁[:, ¼:½]</span><span class="blk wide b">W₂[¼:½, :]</span><span class="blk wide y">partial Y</span></div>
+        <div class="blkrow"><span class="lbl">…</span><span class="blk wide x">…</span><span class="blk wide x">…</span><span class="blk wide m">all-reduce → Y</span></div>
+        <div class="cap">2 all-reduces per transformer layer (one after attention, one after the MLP)</div>
+      </div>
+      <ul>
+        <li><strong>Reduces latency</strong>: each GPU reads only 1/TP of the weights per step.</li>
+        <li><strong>Communication-heavy</strong>: two all-reduces per layer, every step. You need fast links (NVLink/NVSwitch inside a node). TP across nodes over Ethernet is usually a bad idea.</li>
+        <li>TP is limited by the number of KV heads. With 8 KV heads, TP=16 has to replicate KV heads.</li>
+      </ul>
+
+      <h2>Pipeline parallelism (PP)</h2>
+      <p>Split the model <em>by layers</em>: GPU 0 runs layers 0–19, GPU 1 runs 20–39, and so on. Activations flow from stage to stage. Communication is small (one activation tensor per stage boundary), so PP works across nodes.</p>
+      <ul>
+        <li><strong>Doesn't reduce single-request latency</strong>: one token still passes through every layer in sequence.</li>
+        <li>Needs <strong>multiple micro-batches in flight</strong> to keep all stages busy. Otherwise you get "pipeline bubbles".</li>
+        <li>Common pattern: <strong>TP inside a node, PP across nodes</strong>.</li>
+      </ul>
+
+      <h2>Data parallelism (replicas)</h2>
+      <p>Run independent copies of the model and load-balance requests across them. There's no communication during inference, and throughput scales linearly. It's the default way to scale out once one replica meets your latency target. Its "cost" is memory: each replica holds a full copy of the weights.</p>
+
+      <h2>Expert parallelism &amp; MoE</h2>
+      <p><strong>Mixture-of-Experts</strong> models replace each MLP with many "expert" MLPs plus a <strong>router</strong> that sends each token to its top-k experts. Mixtral 8x7B has ~47B total parameters, but each token uses only ~13B of them.</p>
+      <div class="callout key"><span class="tag">KEY IDEA</span>
+        <p>MoE splits <strong>memory</strong> from <strong>compute</strong>: you must <em>store</em> all parameters but only <em>compute with</em> the active ones. At batch 1 you read only the active experts. At large batch, different tokens hit different experts, so nearly all experts get read every step. Large-scale MoE serving is then about using all those weight reads well.</p>
+      </div>
+      <ul>
+        <li><strong>Expert parallelism (EP)</strong>: place different experts on different GPUs. Each token is sent to the GPUs holding its chosen experts via <strong>all-to-all</strong> communication (dispatch), then sent back (combine).</li>
+        <li><strong>Load imbalance</strong>: popular experts become hotspots. Fixes include redundant copies of hot experts and capacity limits.</li>
+        <li>Large-scale deployments of models such as DeepSeek-V3 combine attention data parallelism with wide EP across many GPUs, using specialized all-to-all kernels such as DeepEP.</li>
+      </ul>
+
+      <h2>Context / sequence parallelism</h2>
+      <p>For very long contexts (hundreds of thousands to millions of tokens), even a single sequence's prefill and KV cache are too much for one GPU. <strong>Context parallelism</strong> splits the <em>sequence</em> across GPUs. Approaches like <strong>Ring Attention</strong> pass K/V blocks around a ring of devices while each GPU computes attention for its own chunk of queries, overlapping communication with compute.</p>
+
+      <h2>Choosing a layout</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Strategy</th><th>Splits</th><th>Lower latency?</th><th>Comm pattern</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td>TP</td><td>within layers</td><td>✓ yes</td><td>all-reduce ×2 / layer</td><td>Inside one NVLink node</td></tr>
+          <tr><td>PP</td><td>across layers</td><td>✗ no</td><td>point-to-point</td><td>Across nodes, huge models</td></tr>
+          <tr><td>DP</td><td>requests</td><td>✗ no</td><td>none</td><td>Scaling throughput</td></tr>
+          <tr><td>EP</td><td>MoE experts</td><td>~</td><td>all-to-all</td><td>Large MoE models</td></tr>
+          <tr><td>CP / SP</td><td>sequence</td><td>✓ (long prompts)</td><td>ring / all-gather</td><td>Very long context</td></tr>
+        </tbody>
+      </table></div>
+<pre><code><span class="c"># vLLM examples</span>
+vllm serve meta-llama/Llama-3.1-70B-Instruct --tensor-parallel-size <span class="n">4</span>
+<span class="c"># 2 nodes × 8 GPUs: TP inside each node, PP across nodes</span>
+vllm serve &lt;huge-model&gt; --tensor-parallel-size <span class="n">8</span> --pipeline-parallel-size <span class="n">2</span></code></pre>
+      <div class="callout tip"><span class="tag">RULE OF THUMB</span>
+        <p>Use the <strong>smallest TP that fits the model with enough KV room</strong> and meets your latency target, then scale out with data-parallel replicas. Higher TP means more communication overhead per token, and its gains flatten out.</p>
+      </div>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>You need lower per-token latency for a 70B model that already fits on 2 GPUs. TP=4 or PP=2 with DP=2?</summary>
+        <div class="ans"><p><strong>TP=4</strong>. It splits each step's weight reads across 4 GPUs, cutting per-token time. PP doesn't make a single token faster, and DP only adds throughput.</p></div></details>
+      <details class="quiz"><summary>Why does an MoE model with 37B active parameters (out of 671B) still need many GPUs?</summary>
+        <div class="ans"><p>All 671B parameters must be <em>stored</em> somewhere, because any token can be routed to any expert. Memory capacity is set by total parameters, while per-token compute is set by active ones.</p></div></details>
+      <details class="quiz"><summary>Why is TP across nodes over regular Ethernet usually slow?</summary>
+        <div class="ans"><p>TP needs two all-reduces per layer on every step. That's latency-critical communication on the hot path, and Ethernet is far slower than NVLink in both bandwidth and latency.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://arxiv.org/abs/1909.08053" target="_blank" rel="noopener">Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism</a></li>
+        <li><a href="https://arxiv.org/abs/2401.04088" target="_blank" rel="noopener">Mixtral of Experts</a> · <a href="https://arxiv.org/abs/2101.03961" target="_blank" rel="noopener">Switch Transformers</a></li>
+        <li><a href="https://arxiv.org/abs/2310.01889" target="_blank" rel="noopener">Ring Attention with Blockwise Transformers</a></li>
+        <li><a href="https://jax-ml.github.io/scaling-book/" target="_blank" rel="noopener">How to Scale Your Model</a> (sharding chapters)</li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="parallelism" data-level="mid">
+<summary><span class="badge l2">mid</span>Tensor vs pipeline parallelism for inference: trade-offs?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>TP splits each layer across GPUs. It cuts per-token latency, since each GPU reads 1/N of the weights, but needs two all-reduces per layer, so it wants NVLink within a node. PP splits layers into stages, with cheap point-to-point communication that works across nodes. It doesn't reduce single-token latency and needs many micro-batches to avoid bubbles. The usual setup is TP inside a node and PP across nodes, then data-parallel replicas for throughput.</p>
+<h4>What they're testing</h4>
+<p>Understanding which parallelism reduces latency and which only adds capacity.</p>
+<h4>Follow-ups</h4>
+<ul><li>Why does TP stop scaling well beyond 8 GPUs?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="parallelism" data-level="senior">
+<summary><span class="badge l3">senior</span>What makes serving large MoE models hard?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Memory scales with total parameters but compute with active ones, so you need lots of memory and little compute per token. At high batch, nearly all experts are touched every step, so weight reads aren't small anymore. Expert parallelism needs all-to-all dispatch and combine, which is latency-sensitive. Load imbalance creates hot experts and stragglers. Fixes include wide EP with attention data parallelism, redundant hot experts, specialized all-to-all kernels, grouped GEMMs, and overlapping communication with compute.</p>
+<h4>What they're testing</h4>
+<p>Current frontier knowledge.</p>
+<h4>Follow-ups</h4>
+<ul><li>Why might you pair attention data parallelism with expert parallelism?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="parallelism" data-level="staff">
+<summary><span class="badge l4">staff</span>Estimate the tensor-parallel all-reduce traffic per decode step for a 70B dense model, batch 64, TP=8.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>With hidden size ~8192 and 80 layers, there are 2 all-reduces per layer, each on a [64 × 8192] BF16 tensor = 1 MiB. That's 160 all-reduces of ~1 MiB per step, and a ring all-reduce moves ~2·(N−1)/N × size per GPU ≈ 1.75 MiB each, so ~280 MiB per GPU per step. At ~450 GB/s effective NVLink that's ~0.6 ms of bandwidth time. But 160 small collectives each carry latency (tens of µs), so <strong>latency, not bandwidth,</strong> often dominates. Hence fused all-reduce kernels, overlap, and custom one-shot all-reduce for small messages.</p>
+<h4>What they're testing</h4>
+<p>Quantitative distributed-systems reasoning.</p>
+<h4>Follow-ups</h4>
+<ul><li>How does this change for prefill with 8k tokens?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 3-2 "Parallelism &amp; MoE Inference" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="09-parallelism.md">09-parallelism.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/08-speculative-decoding.html"><span class="dir">◀ previous · 3-1</span><span class="t">Speculative Decoding</span></a><a class="card next" href="../lessons/10-prefix-caching.html"><span class="dir">next · 3-3 ▶</span><span class="t">Prefix Caching &amp; KV Memory</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

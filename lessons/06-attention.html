@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attention Optimizations · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="MQA/GQA/MLA, FlashAttention and PagedAttention.">
+  <link rel="alternate" type="text/markdown" href="06-attention.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Attention Optimizations", "description": "MQA/GQA/MLA, FlashAttention and PagedAttention.", "learningResourceType": "lesson", "educationalLevel": "Core Techniques", "timeRequired": "PT35M", "teaches": ["MQA / GQA / MLA", "FlashAttention", "PagedAttention", "Decode attention kernels"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/06-attention.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="attention">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 2 Core Techniques / 2-3</div><span class="badge l2">WORLD 2</span><span class="badge">Lesson 2-3</span><span class="badge">~35 min read</span><!--/B:meta--></div>
+      <h1>Attention Optimizations</h1>
+      <p class="lede">Attention is the only part of a transformer whose cost grows with context length. Three families of tricks tame it: <strong>architecture</strong> (fewer KV heads), <strong>kernels</strong> (FlashAttention) and <strong>memory management</strong> (PagedAttention).</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Compare MHA, MQA, GQA and MLA and their KV costs</li>
+          <li>Explain how FlashAttention avoids materializing the N×N matrix</li>
+          <li>Explain how PagedAttention removes KV fragmentation</li>
+          <li>Know why decode attention needs its own kernels</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-mha">MHA</a></dt><dd>Multi-Head Attention: every query head has its own key and value head. Best quality, biggest KV cache.</dd></div><div><dt><a href="../vocabulary.html#v-mqa">MQA</a></dt><dd>Multi-Query Attention: all query heads share a single K/V head. The smallest cache, with some quality risk.</dd></div><div><dt><a href="../vocabulary.html#v-gqa">GQA</a></dt><dd>Grouped-Query Attention: groups of query heads share a K/V head (e.g. 32 Q heads, 8 KV heads), so the cache is 4× smaller than MHA.</dd></div><div><dt><a href="../vocabulary.html#v-mla">MLA</a></dt><dd>Multi-head Latent Attention (DeepSeek): caches a compressed low-rank latent instead of full per-head K/V.</dd></div><div><dt><a href="../vocabulary.html#v-flashattention">FlashAttention</a></dt><dd>An IO-aware exact attention kernel. It tiles Q/K/V in on-chip SRAM and never writes the N×N score matrix to HBM.</dd></div><div><dt><a href="../vocabulary.html#v-online-softmax">Online softmax</a></dt><dd>Computing softmax chunk by chunk with a running max and sum, rescaling earlier results as you go. This makes tiling possible.</dd></div><div><dt><a href="../vocabulary.html#v-pagedattention">PagedAttention</a></dt><dd>Stores the KV cache in fixed-size, non-contiguous blocks, like OS virtual-memory pages, to remove fragmentation.</dd></div><div><dt><a href="../vocabulary.html#v-block-table">Block table</a></dt><dd>The per-sequence map from logical KV blocks to physical memory blocks in PagedAttention.</dd></div><div><dt><a href="../vocabulary.html#v-flash-decoding">Flash-Decoding</a></dt><dd>Splits the KV sequence across thread blocks during decode, so even small batches with long contexts use the whole GPU.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>The cost of attention</h2>
+      <p>For a sequence of length <code>N</code>, standard attention computes <code>S = QKᵀ</code> (an N×N matrix), applies softmax, and multiplies by <code>V</code>. In prefill that's <strong>O(N²)</strong> compute and, done naively, <strong>O(N²) memory traffic</strong> for writing and reading S. In decode it's O(N) per token, but the whole KV cache must be read, so it's memory-bound.</p>
+
+      <h2>MHA → MQA → GQA → MLA</h2>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">MHA</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span>&nbsp;&nbsp;<span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span><span class="blk b">K</span></div>
+        <div class="blkrow"><span class="lbl">GQA (g=2)</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span>&nbsp;&nbsp;<span class="blk b">K</span><span class="blk b">K</span></div>
+        <div class="blkrow"><span class="lbl">MQA</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span><span class="blk p">Q</span>&nbsp;&nbsp;<span class="blk b">K</span></div>
+        <div class="cap">8 query heads. Each K head shown has a matching V head. Fewer KV heads means a smaller KV cache</div>
+      </div>
+      <ul>
+        <li><strong>MHA (multi-head attention)</strong>: every query head has its own K and V head. Highest quality, biggest cache.</li>
+        <li><strong>MQA (multi-query attention)</strong>, Shazeer 2019: all query heads share <em>one</em> K/V head. Smallest cache, but quality can drop.</li>
+        <li><strong>GQA (grouped-query attention)</strong>, Ainslie et al. 2023: query heads are split into groups and each group shares a K/V head. Llama 3 uses 32 Q heads and 8 KV heads, so the cache is 4× smaller than MHA with nearly the same quality. This is today's standard.</li>
+        <li><strong>MLA (multi-head latent attention)</strong>, DeepSeek-V2: project K and V down to a small shared <strong>latent vector</strong> per token and cache only that. At inference, the up-projection matrices can be "absorbed" into the query and output projections, so attention runs directly on the latent. The cache is far smaller than MHA and quality holds up well.</li>
+      </ul>
+      <div class="callout key"><span class="tag">KEY IDEA</span>
+        <p>Fewer KV heads also <strong>raises the arithmetic intensity</strong> of decode attention. Every KV head loaded from HBM is reused by several query heads. With GQA group size g, decode attention does about g× more math per byte.</p>
+      </div>
+
+      <h2>FlashAttention</h2>
+      <p>The insight of FlashAttention (Dao et al., 2022) is that attention is slow not because of FLOPs but because of <strong>memory traffic</strong>: writing the N×N score matrix to HBM, reading it back for softmax, writing it again… FlashAttention is <strong>IO-aware</strong>:</p>
+      <ol>
+        <li><strong>Tile</strong> Q, K and V into blocks that fit in on-chip SRAM.</li>
+        <li>For each Q block, loop over K/V blocks, computing partial scores <em>in SRAM</em>.</li>
+        <li>Use <strong>online softmax</strong> to combine partial results without ever seeing a full row.</li>
+        <li>Write only the final output to HBM. The N×N matrix never exists in HBM.</li>
+      </ol>
+      <p>The result is <strong>exact</strong> attention (not an approximation) with O(N) memory and several-fold speedups. Later versions refine the idea:</p>
+      <ul>
+        <li><strong>FlashAttention-2</strong>: better work partitioning across warps and thread blocks, and parallelism over the sequence length.</li>
+        <li><strong>FlashAttention-3</strong>: built for Hopper (H100). Uses asynchronous TMA loads, warp specialization, softmax overlapped with matmuls, and FP8 support.</li>
+      </ul>
+      <h3>Online softmax in 10 lines</h3>
+<pre><code><span class="c"># process scores for one query row in chunks, never holding the whole row</span>
+m = -inf      <span class="c"># running max</span>
+l = <span class="n">0.0</span>       <span class="c"># running sum of exp(score - m)</span>
+acc = zeros(d)  <span class="c"># running weighted sum of V</span>
+<span class="k">for</span> K_blk, V_blk <span class="k">in</span> blocks:
+    s = q @ K_blk.T / sqrt(d)            <span class="c"># partial scores</span>
+    m_new = max(m, s.max())
+    scale = exp(m - m_new)               <span class="c"># rescale old stats to the new max</span>
+    p = exp(s - m_new)
+    l = l * scale + p.sum()
+    acc = acc * scale + p @ V_blk
+    m = m_new
+out = acc / l</code></pre>
+      <p>Subtracting the running max keeps <code>exp</code> numerically stable. Rescaling by <code>exp(m − m_new)</code> fixes up everything accumulated so far whenever a larger score shows up.</p>
+
+      <h2>PagedAttention</h2>
+      <p>Early serving systems reserved a <strong>contiguous</strong> KV buffer per request, sized for the maximum possible length. That caused:</p>
+      <ul>
+        <li><strong>Internal fragmentation</strong>: memory reserved for 4k tokens but only 300 used.</li>
+        <li><strong>External fragmentation</strong>: free memory scattered in gaps too small to use.</li>
+      </ul>
+      <p>The vLLM paper (Kwon et al., SOSP 2023) measured that existing systems wasted <strong>60–80%</strong> of KV memory this way. <strong>PagedAttention</strong> borrows the idea of virtual memory from operating systems:</p>
+      <div class="diagram">
+        <div class="blkrow"><span class="lbl">seq A table</span><span class="blk wide p">→ blk 7</span><span class="blk wide p">→ blk 2</span><span class="blk wide p">→ blk 9</span></div>
+        <div class="blkrow"><span class="lbl">seq B table</span><span class="blk wide b">→ blk 4</span><span class="blk wide b">→ blk 0</span></div>
+        <div class="blkrow"><span class="lbl">GPU blocks</span><span class="blk b">0</span><span class="blk x">1</span><span class="blk p">2</span><span class="blk x">3</span><span class="blk b">4</span><span class="blk x">5</span><span class="blk x">6</span><span class="blk p">7</span><span class="blk x">8</span><span class="blk p">9</span></div>
+        <div class="cap">each block holds KV for a fixed number of tokens (e.g. 16). Logical order comes from the block table, not physical position</div>
+      </div>
+      <ul>
+        <li>KV memory is split into fixed-size <strong>blocks</strong> (e.g. 16 tokens each).</li>
+        <li>Each sequence has a <strong>block table</strong> that maps logical blocks to physical blocks, like a page table.</li>
+        <li>Blocks are allocated on demand as the sequence grows, so waste is limited to the last, partly filled block (under 4% in the paper).</li>
+        <li>The attention kernel follows the block table to gather K/V.</li>
+        <li>Blocks can be <strong>shared</strong> with copy-on-write. That's useful for parallel sampling, beam search and prefix caching (lesson 3-3).</li>
+      </ul>
+
+      <h2>Decode attention kernels</h2>
+      <p>In decode, each sequence has a single query token. A kernel that parallelizes only over (batch × heads) can leave most SMs idle when the batch is small and the context is long. <strong>Flash-Decoding</strong> (split-KV) also splits the KV sequence across thread blocks, computes partial results in parallel, and merges them using the online-softmax statistics.</p>
+      <p>Libraries such as <strong>FlashInfer</strong> provide optimized kernels for paged KV, ragged batches, prefix sharing (cascade attention) and many head layouts. Several serving engines use it.</p>
+
+      <h2>Beyond full attention</h2>
+      <ul>
+        <li><strong>Sliding-window attention</strong>: each token attends only to the last W tokens, so KV per layer is capped at W. Some models alternate local and global layers.</li>
+        <li><strong>Sparse / linear attention, state-space models</strong> (e.g. Mamba-style layers): sub-quadratic alternatives. Hybrid models mix them with a few full-attention layers, which changes the KV math completely.</li>
+      </ul>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>A model has 64 query heads and 8 KV heads. How much smaller is its KV cache than MHA's?</summary>
+        <div class="ans"><p>64 / 8 = <strong>8× smaller</strong>.</p></div></details>
+      <details class="quiz"><summary>Is FlashAttention an approximation of attention?</summary>
+        <div class="ans"><p>No. It computes exactly the same result (up to floating-point rounding). It only changes the order of operations and where intermediate data lives.</p></div></details>
+      <details class="quiz"><summary>Why does PagedAttention make parallel sampling (n=4 completions of one prompt) cheaper?</summary>
+        <div class="ans"><p>All four sequences point their block tables at the <em>same</em> physical blocks for the prompt. New blocks are allocated only when they diverge (copy-on-write), so the prompt's KV is stored once instead of four times.</p></div></details>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">FlashAttention</a>, <a href="https://arxiv.org/abs/2307.08691" target="_blank" rel="noopener">FlashAttention-2</a>, <a href="https://arxiv.org/abs/2407.08608" target="_blank" rel="noopener">FlashAttention-3</a></li>
+        <li><a href="https://arxiv.org/abs/2309.06180" target="_blank" rel="noopener">Efficient Memory Management for LLM Serving with PagedAttention</a> (vLLM)</li>
+        <li><a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA</a> · <a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">MQA</a> · <a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-V2 (MLA)</a></li>
+        <li><a href="https://github.com/flashinfer-ai/flashinfer" target="_blank" rel="noopener">FlashInfer</a> kernel library</li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="attention" data-level="mid">
+<summary><span class="badge l2">mid</span>How does FlashAttention work, and is it an approximation?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>It's exact. Naive attention writes the N×N score matrix to HBM and reads it back for softmax and the V product, so it's memory-bound. FlashAttention tiles Q/K/V into SRAM, computes partial scores per tile, and combines them with <strong>online softmax</strong> (running max and sum, rescaling). Only the output goes to HBM. Memory traffic drops from O(N²) to O(N), giving big speedups and allowing long sequences.</p>
+<h4>What they're testing</h4>
+<p>IO-awareness, the most important performance idea of recent years.</p>
+<h4>Follow-ups</h4>
+<ul><li>Derive the online-softmax update.</li><li>What did FA2 and FA3 change?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="attention" data-level="mid">
+<summary><span class="badge l2">mid</span>What problem does PagedAttention solve, and what else does it enable?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Contiguous per-request KV reservations waste memory through over-reservation and fragmentation; the vLLM paper measured 60–80% waste in earlier systems. PagedAttention stores KV in fixed-size blocks mapped by a per-sequence block table, like virtual memory, so waste is under ~4%. It also enables <strong>sharing</strong> via reference counts and copy-on-write: parallel sampling, beam search and prefix caching.</p>
+<h4>What they're testing</h4>
+<p>Memory management as a throughput lever.</p>
+<h4>Follow-ups</h4>
+<ul><li>How does block size affect performance and waste?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="attention" data-level="senior">
+<summary><span class="badge l3">senior</span>Compare MHA, GQA and MLA from a serving perspective.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>MHA has one KV head per query head: the largest cache and the lowest decode-attention intensity. GQA shares KV heads across groups of query heads: g× smaller cache, g× more reuse per byte, and near-MHA quality, which is why it's the default. MLA caches a low-rank latent per token and absorbs the projections at inference: a much smaller cache, but different kernels, and some wrinkles with TP sharding and positional embeddings. All three change how many sequences fit, and so throughput.</p>
+<h4>What they're testing</h4>
+<p>Connecting architecture to memory, bandwidth and parallelism.</p>
+<h4>Follow-ups</h4>
+<ul><li>Why does a small number of KV heads limit the tensor-parallel degree?</li></ul>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 2-3 "Attention Optimizations" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="06-attention.md">06-attention.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/05-batching.html"><span class="dir">◀ previous · 2-2</span><span class="t">Batching: Static → Continuous</span></a><a class="card next" href="../lessons/07-quantization.html"><span class="dir">next · 2-4 ▶</span><span class="t">Quantization</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

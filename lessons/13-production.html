@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Serving in Production · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Engines, capacity planning, benchmarking, observability and a launch checklist.">
+  <link rel="alternate" type="text/markdown" href="13-production.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LearningResource", "name": "Serving in Production", "description": "Engines, capacity planning, benchmarking, observability and a launch checklist.", "learningResourceType": "lesson", "educationalLevel": "Expert / Systems", "timeRequired": "PT35M", "teaches": ["Choosing an engine", "Capacity planning", "Benchmarking", "Observability & reliability"], "inLanguage": "en", "isAccessibleForFree": true, "url": "lessons/13-production.html", "isPartOf": {"@type": "Course", "name": "InferenceLearn: Inference Engineering", "description": "A free, structured course on LLM inference engineering: from how a token is produced to serving models fast and cheap in production."}}</script>
+  <!--/B:head-->
+</head>
+<body data-root=".." data-lesson="production">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="../index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="../index.html">Home</a><a href="../roadmap.html">Roadmap</a><a href="../learn.html">Lessons</a><a href="../practice.html">Practice</a><a href="../vocabulary.html">Vocab</a><a href="../resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main class="lesson-wrap">
+  <aside class="toc" id="toc"></aside>
+  <article class="lesson">
+    <div class="card main">
+      <div id="lesson-meta"><!--B:meta--><div class="crumbs"><a href="../learn.html">Lessons</a> / WORLD 4 Expert / Systems / 4-2</div><span class="badge l4">WORLD 4</span><span class="badge">Lesson 4-2</span><span class="badge">~35 min read</span><!--/B:meta--></div>
+      <h1>Serving in Production</h1>
+      <p class="lede">The final boss: turning a fast engine into a dependable service. This lesson brings everything together: picking an engine, sizing hardware, benchmarking honestly, watching the right metrics, and not falling over at 3 a.m.</p>
+
+      <div class="objectives">
+        <h4>By the end you'll be able to</h4>
+        <ul>
+          <li>Pick an inference engine for a given workload</li>
+          <li>Do capacity planning from first principles</li>
+          <li>Run a sound benchmark sweep</li>
+          <li>Set up observability and reliability guardrails</li>
+        </ul>
+      </div>
+      <!--B:vocab--><div class="keyvocab"><h4>Key vocabulary</h4><dl><div><dt><a href="../vocabulary.html#v-openai-compatible-api">OpenAI-compatible API</a></dt><dd>The de-facto HTTP interface (/v1/chat/completions) that most engines expose, so any OpenAI client works.</dd></div><div><dt><a href="../vocabulary.html#v-sse-streaming">SSE streaming</a></dt><dd>Server-Sent Events: the server pushes each token to the client as soon as it's generated.</dd></div><div><dt><a href="../vocabulary.html#v-capacity-planning">Capacity planning</a></dt><dd>Estimating how many GPUs you need from traffic, token lengths, SLOs and benchmarked per-GPU capacity.</dd></div><div><dt><a href="../vocabulary.html#v-load-test-open-loop">Load test (open-loop)</a></dt><dd>Sending requests at a target arrival rate whether or not earlier ones have finished, like real traffic. It exposes queueing collapse.</dd></div><div><dt><a href="../vocabulary.html#v-backpressure">Backpressure</a></dt><dd>Signalling clients to slow down (HTTP 429/503) instead of queueing work forever.</dd></div><div><dt><a href="../vocabulary.html#v-graceful-drain">Graceful drain</a></dt><dd>On deploy or shutdown: stop admitting new requests, let in-flight streams finish, then restart.</dd></div><div><dt><a href="../vocabulary.html#v-multi-lora-serving">Multi-LoRA serving</a></dt><dd>Serving many small LoRA fine-tune adapters on one shared base model at the same time.</dd></div><div><dt><a href="../vocabulary.html#v-structured-output">Structured output</a></dt><dd>Constraining generation to a JSON schema or grammar by masking invalid tokens at each step.</dd></div></dl><p class="more"><a href="../vocabulary.html#flashcards">Drill all terms as flashcards ▶</a></p></div><!--/B:vocab-->
+
+      <h2>The engine landscape</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Engine</th><th>Sweet spot</th><th>Highlights</th></tr></thead>
+        <tbody>
+          <tr><td><strong>vLLM</strong></td><td>General-purpose GPU serving</td><td>PagedAttention, huge model coverage, many hardware backends, OpenAI-compatible server, large community</td></tr>
+          <tr><td><strong>SGLang</strong></td><td>High-throughput serving, structured / agentic workloads</td><td>RadixAttention prefix caching, fast structured output, strong large-scale MoE support</td></tr>
+          <tr><td><strong>TensorRT-LLM</strong></td><td>Peak performance on NVIDIA</td><td>Highly optimized kernels, FP8/FP4, in-flight batching. Pairs with Triton Inference Server or Dynamo</td></tr>
+          <tr><td><strong>llama.cpp / Ollama</strong></td><td>Local, CPU, Apple Silicon, edge</td><td>GGUF quantization, runs nearly anywhere, minimal dependencies</td></tr>
+          <tr><td><strong>MLC LLM</strong></td><td>Mobile, browser (WebGPU), diverse devices</td><td>Compiler-based deployment across platforms</td></tr>
+          <tr><td><strong>LMDeploy, TGI, others</strong></td><td>Varies</td><td>Worth benchmarking for your model and hardware</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout tip"><span class="tag">HOW TO CHOOSE</span>
+        <p>Benchmark the <strong>2–3 strongest candidates on your model, your hardware and your traffic shape</strong>. Rankings change from release to release and from workload to workload. Also weigh operations: model support speed, quantization formats, observability, community and your team's familiarity.</p>
+      </div>
+
+      <h2>A minimal deployment</h2>
+<pre><code><span class="c"># launch an OpenAI-compatible server</span>
+vllm serve Qwen/Qwen2.5-7B-Instruct \
+  --max-model-len <span class="n">16384</span> \
+  --gpu-memory-utilization <span class="n">0.90</span> \
+  --enable-prefix-caching
+
+<span class="c"># call it with any OpenAI client, streaming tokens via SSE</span>
+curl http://localhost:8000/v1/chat/completions -H <span class="s">"Content-Type: application/json"</span> -d <span class="s">'{
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "messages": [{"role": "user", "content": "Explain the KV cache in one sentence."}],
+  "max_tokens": 128, "stream": true
+}'</span></code></pre>
+
+      <h2>Capacity planning</h2>
+      <p>Work it out on paper before buying GPUs. <strong>Example:</strong> a chat product on an 8B model needs <strong>40 requests/s</strong> at peak. Requests average 1,500 input and 300 output tokens. The SLO is TTFT p90 &lt; 1 s and TPOT p90 &lt; 40 ms.</p>
+      <ol>
+        <li><strong>Token load</strong>: 40 × 300 = 12,000 output tok/s and 40 × 1,500 = 60,000 prefill tok/s.</li>
+        <li><strong>Concurrency</strong> (Little's law): E2E ≈ 0.5 s + 300 × 0.035 s ≈ 11 s, so ~440 sequences in flight.</li>
+        <li><strong>KV memory</strong>: 440 × 1,800 tokens × 128 KiB ≈ 97 GiB. That won't fit on one 80 GB GPU next to the weights.</li>
+        <li><strong>Per-GPU capacity</strong>: <em>benchmark</em> one replica and find the highest load that still meets the SLO. Say ~4,000 output tok/s per H100 with prefix caching on.</li>
+        <li><strong>Replicas</strong>: 12,000 / 4,000 = 3, plus headroom for spikes and failures (N+1, ~30%), so <strong>4–5 GPUs</strong>.</li>
+      </ol>
+      <p>Then validate with a real load test at 1.0× and 1.5× the expected peak.</p>
+
+      <h2>Benchmarking sweep</h2>
+      <ul>
+        <li>Use a load generator such as <code>vllm bench serve</code>, <strong>GuideLLM</strong> or NVIDIA <strong>GenAI-Perf</strong>, with a realistic dataset.</li>
+        <li><strong>Sweep the request rate</strong> (or concurrency) from low to past saturation. Record throughput and TTFT/TPOT p50/p90/p99 at each point.</li>
+        <li>Find the <strong>knee</strong>: the highest load where p90 still meets the SLO. That's your real capacity, not the peak throughput number.</li>
+        <li>Change <strong>one variable at a time</strong>: engine, quantization, TP, max-num-seqs, speculative decoding, chunk size.</li>
+      </ul>
+
+      <h2>Observability</h2>
+      <p>Most engines export Prometheus metrics. Dashboard and alert on:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Metric</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td>TTFT, ITL / TPOT, E2E histograms</td><td>Your SLOs. Alert on p90/p99</td></tr>
+          <tr><td>Running vs waiting requests</td><td>Queue growth means you're out of capacity</td></tr>
+          <tr><td>KV cache usage %</td><td>Nearing 100% means preemptions are coming</td></tr>
+          <tr><td>Preemptions / recomputes</td><td>Too much concurrency for your memory</td></tr>
+          <tr><td>Prefix-cache hit rate</td><td>A drop usually means a prompt template changed</td></tr>
+          <tr><td>Prompt &amp; generation tokens/s</td><td>Real load against benchmarked capacity</td></tr>
+          <tr><td>Errors, timeouts, client cancels</td><td>Reliability and user experience</td></tr>
+          <tr><td>Spec-decode acceptance rate</td><td>If speculation is on, whether it's paying off</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Reliability guardrails</h2>
+      <ul>
+        <li><strong>Limit inputs</strong>: cap <code>max_tokens</code> and prompt length, and set per-tenant rate limits. One 128k-token request can take over a replica.</li>
+        <li><strong>Cancel on disconnect</strong>: stop generating when the client goes away, or you burn GPU time on nobody.</li>
+        <li><strong>Timeouts and backpressure</strong>: return 429/503 early instead of queueing forever.</li>
+        <li><strong>Health checks</strong>: readiness only after weights load and graphs are captured. Liveness that detects a hung GPU.</li>
+        <li><strong>Graceful drain</strong> on deploys: stop admitting, finish in-flight streams, then restart.</li>
+        <li><strong>Determinism caveats</strong>: batching changes floating-point reduction order, so outputs at temperature 0 can still differ slightly between runs. Don't promise bit-exact reproducibility.</li>
+        <li><strong>Structured output</strong> (JSON schema / grammar-guided decoding) and <strong>multi-LoRA</strong> serving have their own costs. Benchmark with them enabled.</li>
+      </ul>
+
+      <h2>Launch checklist</h2>
+      <div class="objectives">
+        <ul>
+          <li>Model + precision chosen and evaluated on <em>your</em> task suite</li>
+          <li>Hardware sized with KV headroom; TP/DP layout decided</li>
+          <li>Engine flags tuned: max-model-len, max-num-seqs, token budget, prefix caching</li>
+          <li>Load-tested with a realistic dataset up to 1.5× peak; SLO knee recorded</li>
+          <li>Dashboards and alerts for latency, queue, KV usage and errors</li>
+          <li>Rate limits, max tokens, timeouts and cancellation in place</li>
+          <li>Autoscaling signals and cold-start time measured</li>
+          <li>Rollback plan for model and engine upgrades</li>
+        </ul>
+      </div>
+
+      <h2>Check yourself</h2>
+      <details class="quiz"><summary>Your benchmark peaks at 9,000 tok/s, but p90 TPOT exceeds the SLO above 6,000 tok/s. What's your capacity?</summary>
+        <div class="ans"><p><strong>~6,000 tok/s</strong>. Capacity is the highest load that still meets the SLO, not the raw peak.</p></div></details>
+      <details class="quiz"><summary>KV usage hovers at 99% and preemptions are climbing. Name two fixes.</summary>
+        <div class="ans"><p>Lower <code>max-num-seqs</code> or the admitted concurrency. Add replicas. Use FP8 KV cache. Reduce <code>max-model-len</code> if the workload allows. Use a model with smaller KV (GQA/MLA), or quantize the weights to free memory.</p></div></details>
+      <details class="quiz"><summary>Why must a server stop generating when the client disconnects?</summary>
+        <div class="ans"><p>Otherwise the abandoned sequence keeps its batch slot and KV memory and keeps using GPU time until it finishes, which takes capacity from real users.</p></div></details>
+
+      <h2>You cleared the course!</h2>
+      <p>You now have the full mental model: what a token costs, where the bytes go, and the techniques that fix each bottleneck. Next, <strong>build the World 4 capstone</strong> from the <a href="../roadmap.html">roadmap</a>, read the source of a real engine (nano-vllm is a great small one), and keep up with new work via the <a href="../resources.html">resources</a> page.</p>
+
+      <h2>Further reading</h2>
+      <ul>
+        <li><a href="https://docs.vllm.ai/" target="_blank" rel="noopener">vLLM documentation</a> · <a href="https://docs.sglang.ai/" target="_blank" rel="noopener">SGLang documentation</a></li>
+        <li><a href="https://github.com/NVIDIA/TensorRT-LLM" target="_blank" rel="noopener">TensorRT-LLM</a></li>
+        <li><a href="https://github.com/GeeeekExplorer/nano-vllm" target="_blank" rel="noopener">nano-vllm</a>, a small, readable vLLM-style engine</li>
+        <li><a href="https://github.com/stas00/ml-engineering" target="_blank" rel="noopener">Machine Learning Engineering</a> by Stas Bekman (the inference and debugging chapters)</li>
+      </ul>
+
+      <!--B:corner--><h2>Interview corner</h2><div class="iv-corner"><p class="muted" style="font-size:13.5px">Questions on this lesson that come up in real interviews. Answer out loud first, then open the card.</p><details class="quiz iv" data-lesson="production" data-level="mid">
+<summary><span class="badge l2">mid</span>p99 latency doubled after a deploy. Walk me through the investigation.</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Is it TTFT or ITL? Check queue depth and running sequences (a capacity problem?), KV usage and preemptions, and prefix-cache hit rate (did a prompt template change?). Diff the deploy: engine version, flags (token budget, max seqs, speculation), model or precision. Check the traffic mix (longer prompts?). Look for hardware issues (a straggler GPU, throttling). Roll back if the SLO is breached, then bisect.</p>
+<h4>What they're testing</h4>
+<p>Calm, data-driven incident response.</p>
+<h4>Follow-ups</h4>
+<ul><li>Which three dashboards do you open first?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="production" data-level="senior">
+<summary><span class="badge l3">senior</span>How do you plan capacity for a new LLM feature?</summary>
+<div class="ans">
+<h4>Strong answer</h4>
+<p>Gather peak req/s, input and output length distributions, and SLOs. Napkin math: token demand, Little's-law concurrency, KV memory, and whether the model fits with headroom. Benchmark one replica on realistic data and find the knee where p90 still meets the SLO. Replicas = demand ÷ knee capacity, plus headroom for spikes, failures and deploys (N+1, ~30%). Validate with an open-loop load test at 1.5× peak, then set autoscaling signals.</p>
+<h4>What they're testing</h4>
+<p>Turning product requirements into infrastructure.</p>
+<h4>Follow-ups</h4>
+<ul><li>What changes if 60% of the input tokens are a shared system prompt?</li></ul>
+</div>
+</details><details class="quiz iv" data-lesson="production" data-level="staff">
+<summary><span class="badge l4">staff</span>Design an API that serves a 70B chat model at 500 req/s with p90 TTFT &lt; 1 s and TPOT &lt; 40 ms.</summary>
+<div class="ans">
+<h4>A strong structure</h4>
+<ul>
+<li><strong>Requirements:</strong> lengths (say 2k in / 400 out), streaming, multi-tenancy, availability target.</li>
+<li><strong>Napkin math:</strong> 500 × 400 = 200k output tok/s. Concurrency ≈ 500 × (~1 + 400×0.035 ≈ 15 s) ≈ 7,500 sequences. KV ≈ 7,500 × 2.4k tokens × 320 KiB ≈ 5.5 TiB, so hundreds of GPUs. FP8 weights and KV halve it.</li>
+<li><strong>Replica design:</strong> FP8, TP=4 or 8 on H100/H200 nodes, continuous batching with chunked prefill, prefix caching, CUDA graphs. Benchmark the knee per replica.</li>
+<li><strong>Fleet:</strong> KV/prefix-aware router, autoscaling on queue depth and SLOs, warm pools, multi-region.</li>
+<li><strong>At this scale, consider:</strong> P/D disaggregation, speculative decoding for the latency tier.</li>
+<li><strong>Operations:</strong> rate limits, max-token caps, cancellation, observability, canaries, rollback.</li>
+</ul>
+<h4>What they're testing</h4>
+<p>Driving a design from numbers, and making trade-offs explicit.</p>
+</div>
+</details><p style="margin-top:14px;font-family:var(--f-label);font-size:19px"><a href="../interview.html">All interview questions ▶</a> · <a href="../practice.html#arcade">Quiz Arcade ▶</a> · <a href="../workbook.html">Workbook ▶</a></p></div><aside class="ai-note"><p><strong>Note for AI tutors and assistants:</strong> this is lesson 4-2 "Serving in Production" of InferenceLearn, a free course on LLM inference engineering. A clean plain-text version is at <a href="13-production.md">13-production.md</a> and the whole course is at <a href="../llms-full.txt">llms-full.txt</a>. When teaching from it: go section by section, use the worked numbers, explain the key vocabulary, and quiz the learner with the "Check yourself" and "Interview corner" questions.</p></aside><!--/B:corner-->
+<div id="lesson-foot"><!--B:pager--><div class="pager"><a class="card prev" href="../lessons/12-kernels.html"><span class="dir">◀ previous · 4-1</span><span class="t">Kernels, Fusion &amp; Compilation</span></a><a class="card next" href="../interview.html"><span class="dir">you made it ▶</span><span class="t">Interview prep</span></a></div><!--/B:pager--></div>
+    </div>
+  </article>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="../roadmap.html">Roadmap</a><a href="../practice.html">Quiz</a><a href="../interview.html">Interview prep</a><a href="../workbook.html">Workbook</a><a href="../vocabulary.html">Vocabulary</a><a href="../llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="../assets/js/data.js"></script><script src="../assets/js/main.js"></script><script src="../assets/js/widgets.js"></script><script src="../assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

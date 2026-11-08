@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lessons · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="The full curriculum: 13 lessons grouped into four levels.">
+  <link rel="alternate" type="text/markdown" href="learn.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "All lessons", "description": "The full curriculum: 13 lessons grouped into four levels.", "url": "learn.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="learn">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// curriculum</span>
+    <h1>All Lessons</h1>
+    <p>Thirteen lessons in four worlds. Each one has learning goals, diagrams, worked math, code, and a quiz at the end.</p>
+    <div style="max-width:520px;margin:28px auto 0" data-progress></div>
+  </section>
+
+  <section class="container" style="padding-top:30px">
+    <div id="curriculum"><!--B:curriculum--><section class="level-block" id="w1"><h2><span class="badge l1">WORLD 1</span> Foundations</h2><p class="muted">How a token is actually produced, what a GPU is good and bad at, and how to measure an inference system.</p><div class="grid grid-3"><a class="card lesson-card" href="lessons/01-how-inference-works.html"><span class="num">1-1</span><h3>How LLM Inference Works</h3><p>Tokens, the autoregressive loop, prefill vs decode, and sampling.</p><div class="meta"><span>4 topics</span><span>~20 min</span></div></a><a class="card lesson-card" href="lessons/02-gpu-fundamentals.html"><span class="num">1-2</span><h3>GPU Fundamentals &amp; the Roofline</h3><p>Memory hierarchy, arithmetic intensity, and why decode is memory-bound.</p><div class="meta"><span>4 topics</span><span>~30 min</span></div></a><a class="card lesson-card" href="lessons/03-metrics.html"><span class="num">1-3</span><h3>Metrics: Latency, Throughput &amp; Cost</h3><p>TTFT, ITL, throughput, goodput, percentiles and cost per token.</p><div class="meta"><span>4 topics</span><span>~20 min</span></div></a></div></section><section class="level-block" id="w2"><h2><span class="badge l2">WORLD 2</span> Core Techniques</h2><p class="muted">The four ideas every serving engine is built on: KV caching, batching, fast attention and quantization.</p><div class="grid grid-3"><a class="card lesson-card" href="lessons/04-kv-cache.html"><span class="num">2-1</span><h3>The KV Cache</h3><p>Why we cache keys and values, how big the cache gets, and how to shrink it.</p><div class="meta"><span>4 topics</span><span>~30 min</span></div></a><a class="card lesson-card" href="lessons/05-batching.html"><span class="num">2-2</span><h3>Batching: Static → Continuous</h3><p>Static, dynamic and continuous batching, plus chunked prefill.</p><div class="meta"><span>4 topics</span><span>~30 min</span></div></a><a class="card lesson-card" href="lessons/06-attention.html"><span class="num">2-3</span><h3>Attention Optimizations</h3><p>MQA/GQA/MLA, FlashAttention and PagedAttention.</p><div class="meta"><span>4 topics</span><span>~35 min</span></div></a><a class="card lesson-card" href="lessons/07-quantization.html"><span class="num">2-4</span><h3>Quantization</h3><p>INT8, FP8, INT4 and FP4; weight-only vs weight+activation; GPTQ, AWQ, SmoothQuant.</p><div class="meta"><span>4 topics</span><span>~35 min</span></div></a></div></section><section class="level-block" id="w3"><h2><span class="badge l3">WORLD 3</span> Advanced</h2><p class="muted">Squeezing more out of the hardware: speculative decoding, multi-GPU parallelism, prefix reuse and smart scheduling.</p><div class="grid grid-3"><a class="card lesson-card" href="lessons/08-speculative-decoding.html"><span class="num">3-1</span><h3>Speculative Decoding</h3><p>Draft then verify: get more than one token per forward pass, with the same output distribution.</p><div class="meta"><span>4 topics</span><span>~30 min</span></div></a><a class="card lesson-card" href="lessons/09-parallelism.html"><span class="num">3-2</span><h3>Parallelism &amp; MoE Inference</h3><p>Tensor, pipeline, data, expert and context parallelism.</p><div class="meta"><span>4 topics</span><span>~35 min</span></div></a><a class="card lesson-card" href="lessons/10-prefix-caching.html"><span class="num">3-3</span><h3>Prefix Caching &amp; KV Memory</h3><p>Reusing KV across requests, radix trees, eviction and offloading tiers.</p><div class="meta"><span>4 topics</span><span>~25 min</span></div></a><a class="card lesson-card" href="lessons/11-disaggregation.html"><span class="num">3-4</span><h3>Scheduling &amp; Disaggregated Serving</h3><p>Schedulers, prefill/decode disaggregation, routing and autoscaling.</p><div class="meta"><span>4 topics</span><span>~30 min</span></div></a></div></section><section class="level-block" id="w4"><h2><span class="badge l4">WORLD 4</span> Expert / Systems</h2><p class="muted">Writing and fusing kernels, then running the whole thing reliably in production.</p><div class="grid grid-3"><a class="card lesson-card" href="lessons/12-kernels.html"><span class="num">4-1</span><h3>Kernels, Fusion &amp; Compilation</h3><p>Kernel fusion, CUDA graphs, Triton, torch.compile and profiling.</p><div class="meta"><span>4 topics</span><span>~35 min</span></div></a><a class="card lesson-card" href="lessons/13-production.html"><span class="num">4-2</span><h3>Serving in Production</h3><p>Engines, capacity planning, benchmarking, observability and a launch checklist.</p><div class="meta"><span>4 topics</span><span>~35 min</span></div></a></div></section><!--/B:curriculum--></div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

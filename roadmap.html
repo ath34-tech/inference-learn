@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap · InferenceLearn</title>
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <meta name="description" content="Prerequisites, four worlds from basic to expert, capstone projects and an 8-week study plan.">
+  <link rel="alternate" type="text/markdown" href="roadmap.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Roadmap", "description": "Prerequisites, four worlds from basic to expert, capstone projects and an 8-week study plan.", "url": "roadmap.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="roadmap">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// world map</span>
+    <h1>The Inference Engineering Roadmap</h1>
+    <p>Start at World 0 and work down. Each stage lists its lessons and the topics they cover. Cleared lessons get a green check.</p>
+    <div style="max-width:520px;margin:28px auto 0" data-progress></div>
+  </section>
+
+  <!-- WORLD 0 -->
+  <section class="container section" style="padding-bottom:20px">
+    <div class="card" style="box-shadow:8px 8px 0 var(--butter);max-width:960px;margin:0 auto">
+      <div class="stage-head"><span class="badge l0">WORLD 0</span><span class="stage-world">prerequisites · self-paced</span></div>
+      <h3 style="margin:6px 0 12px;font-size:15px">Before you start</h3>
+      <p class="muted" style="font-size:13.5px">You don't need to be an expert in any of these. Being comfortable with them makes everything after much easier. Each item links to a good free resource.</p>
+      <div class="grid grid-2" style="gap:14px 30px;margin-top:10px">
+        <div>
+          <h4>Programming</h4>
+          <ul style="padding-left:1.2em;font-size:14px">
+            <li>Python: classes, generators, async basics</li>
+            <li>PyTorch tensors, shapes, <code>matmul</code>, device placement (<a href="https://pytorch.org/tutorials/beginner/basics/intro.html" target="_blank" rel="noopener">PyTorch basics</a>)</li>
+            <li>Reading C++ / CUDA is a plus for World 4</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Math</h4>
+          <ul style="padding-left:1.2em;font-size:14px">
+            <li>Matrix multiplication and its FLOP count (2·m·n·k)</li>
+            <li>Softmax, probability distributions, sampling</li>
+            <li>Back-of-envelope estimation with orders of magnitude</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Transformers</h4>
+          <ul style="padding-left:1.2em;font-size:14px">
+            <li>Self-attention: Q, K, V, heads (<a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">Illustrated Transformer</a>)</li>
+            <li>Decoder-only LLMs, embeddings, MLP / FFN blocks</li>
+            <li>Build one yourself (<a href="https://www.youtube.com/watch?v=kCc8FmEb1nY" target="_blank" rel="noopener">Karpathy: Let's build GPT</a>)</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Systems</h4>
+          <ul style="padding-left:1.2em;font-size:14px">
+            <li>Processes, memory, latency vs bandwidth</li>
+            <li>HTTP APIs, queues, basic load balancing</li>
+            <li>Linux and the command line, Docker</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WORLDS 1–4 (rendered from lesson data) -->
+  <section class="container section" style="padding-top:30px">
+    <div class="roadmap" id="roadmap"><!--B:roadmap--><div class="stage"><div class="card"><div class="stage-head"><span class="badge l1">WORLD 1</span><span class="stage-world">3 lessons · ~70 min</span></div><h3>Foundations</h3><p class="muted" style="font-size:13.5px;margin:0">How a token is actually produced, what a GPU is good and bad at, and how to measure an inference system.</p><ul class="stage-list"><li><span class="chk"></span><a href="lessons/01-how-inference-works.html">1-1 · How LLM Inference Works</a><span class="sub">Tokenization &amp; logits · Autoregressive loop · Prefill vs decode · Sampling strategies</span></li><li><span class="chk"></span><a href="lessons/02-gpu-fundamentals.html">1-2 · GPU Fundamentals &amp; the Roofline</a><span class="sub">HBM, SRAM, tensor cores · Arithmetic intensity · Roofline model · Speed-of-light math</span></li><li><span class="chk"></span><a href="lessons/03-metrics.html">1-3 · Metrics: Latency, Throughput &amp; Cost</a><span class="sub">TTFT / TPOT / ITL · Throughput vs latency · Goodput &amp; SLOs · Cost per 1M tokens</span></li></ul></div></div><div class="stage"><div class="card"><div class="stage-head"><span class="badge l2">WORLD 2</span><span class="stage-world">4 lessons · ~130 min</span></div><h3>Core Techniques</h3><p class="muted" style="font-size:13.5px;margin:0">The four ideas every serving engine is built on: KV caching, batching, fast attention and quantization.</p><ul class="stage-list"><li><span class="chk"></span><a href="lessons/04-kv-cache.html">2-1 · The KV Cache</a><span class="sub">Why caching works · Sizing formula · Memory budget · Reduction techniques</span></li><li><span class="chk"></span><a href="lessons/05-batching.html">2-2 · Batching: Static → Continuous</a><span class="sub">Why batching helps · Static &amp; dynamic · Continuous batching · Chunked prefill</span></li><li><span class="chk"></span><a href="lessons/06-attention.html">2-3 · Attention Optimizations</a><span class="sub">MQA / GQA / MLA · FlashAttention · PagedAttention · Decode attention kernels</span></li><li><span class="chk"></span><a href="lessons/07-quantization.html">2-4 · Quantization</a><span class="sub">Scales &amp; zero points · Granularity · Outliers · GPTQ / AWQ / FP8</span></li></ul></div></div><div class="stage"><div class="card"><div class="stage-head"><span class="badge l3">WORLD 3</span><span class="stage-world">4 lessons · ~120 min</span></div><h3>Advanced</h3><p class="muted" style="font-size:13.5px;margin:0">Squeezing more out of the hardware: speculative decoding, multi-GPU parallelism, prefix reuse and smart scheduling.</p><ul class="stage-list"><li><span class="chk"></span><a href="lessons/08-speculative-decoding.html">3-1 · Speculative Decoding</a><span class="sub">Draft &amp; verify · Rejection sampling · Expected speedup · Medusa / EAGLE / MTP</span></li><li><span class="chk"></span><a href="lessons/09-parallelism.html">3-2 · Parallelism &amp; MoE Inference</a><span class="sub">Tensor parallel · Pipeline parallel · Expert parallel &amp; MoE · Context parallel</span></li><li><span class="chk"></span><a href="lessons/10-prefix-caching.html">3-3 · Prefix Caching &amp; KV Memory</a><span class="sub">Shared prefixes · Hash blocks vs radix tree · Eviction &amp; preemption · KV offloading</span></li><li><span class="chk"></span><a href="lessons/11-disaggregation.html">3-4 · Scheduling &amp; Disaggregated Serving</a><span class="sub">Scheduler policies · P/D disaggregation · KV-aware routing · Autoscaling</span></li></ul></div></div><div class="stage"><div class="card"><div class="stage-head"><span class="badge l4">WORLD 4</span><span class="stage-world">2 lessons · ~70 min</span></div><h3>Expert / Systems</h3><p class="muted" style="font-size:13.5px;margin:0">Writing and fusing kernels, then running the whole thing reliably in production.</p><ul class="stage-list"><li><span class="chk"></span><a href="lessons/12-kernels.html">4-1 · Kernels, Fusion &amp; Compilation</a><span class="sub">Kernel fusion · CUDA graphs · Triton &amp; CUTLASS · Profiling (MFU / MBU)</span></li><li><span class="chk"></span><a href="lessons/13-production.html">4-2 · Serving in Production</a><span class="sub">Choosing an engine · Capacity planning · Benchmarking · Observability &amp; reliability</span></li></ul></div></div><!--/B:roadmap--></div>
+  </section>
+
+  <!-- BOSS LEVEL -->
+  <section class="container section" style="padding-top:0">
+    <div class="section-title">
+      <span class="kicker">// boss level</span>
+      <h2>Capstone projects</h2>
+      <p>Reading gets you about halfway. Building gets you the rest. Pick one project per world.</p>
+    </div>
+    <div class="grid grid-2">
+      <div class="card">
+        <span class="badge l1">World 1 project</span>
+        <h3>Naive generator + benchmark</h3>
+        <p style="font-size:14px">Write a token-by-token generation loop for a small Hugging Face model in plain PyTorch. Measure TTFT and per-token latency, then compare them with the speed-of-light number for your GPU.</p>
+      </div>
+      <div class="card">
+        <span class="badge l2">World 2 project</span>
+        <h3>Add a KV cache &amp; batching</h3>
+        <p style="font-size:14px">Extend your generator with a KV cache, then a simple continuous-batching scheduler with a fixed slot count. Plot throughput vs concurrency before and after.</p>
+      </div>
+      <div class="card">
+        <span class="badge l3">World 3 project</span>
+        <h3>Speculative decoding + prefix cache</h3>
+        <p style="font-size:14px">Use a small draft model to speed up a bigger one, and check that greedy outputs match exactly. Add a hash-based prefix cache and measure TTFT on repeated system prompts.</p>
+      </div>
+      <div class="card">
+        <span class="badge l4">World 4 project</span>
+        <h3>Mini inference engine</h3>
+        <p style="font-size:14px">Build a "nano-vLLM": paged KV blocks, a scheduler with chunked prefill, CUDA graphs for decode, and an OpenAI-compatible streaming endpoint. Benchmark it against vLLM and explain the gap.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STUDY PLAN -->
+  <section class="container section" style="padding-top:0">
+    <div class="section-title">
+      <span class="kicker">// suggested pace</span>
+      <h2>An 8-week study plan</h2>
+      <p>About 5–8 hours a week. Go faster or slower as you like.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Week</th><th>Focus</th><th>Do</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>World 0 + lesson 1-1</td><td>Build GPT from scratch (Karpathy). Write the naive generation loop.</td></tr>
+          <tr><td>2</td><td>Lessons 1-2, 1-3</td><td>Roofline math for your GPU. Benchmark your naive loop.</td></tr>
+          <tr><td>3</td><td>Lessons 2-1, 2-2</td><td>Add a KV cache and continuous batching to your loop.</td></tr>
+          <tr><td>4</td><td>Lessons 2-3, 2-4</td><td>Read the FlashAttention and vLLM papers. Quantize a model to INT4/FP8 and run evals.</td></tr>
+          <tr><td>5</td><td>Lessons 3-1, 3-2</td><td>Implement speculative decoding. Run vLLM with <code>--tensor-parallel-size 2</code> if you have the hardware.</td></tr>
+          <tr><td>6</td><td>Lessons 3-3, 3-4</td><td>Benchmark prefix caching and chunked prefill in vLLM or SGLang.</td></tr>
+          <tr><td>7</td><td>Lesson 4-1</td><td>Write a fused Triton kernel. Profile a decode step with Nsight Systems.</td></tr>
+          <tr><td>8</td><td>Lesson 4-2</td><td>Capstone: deploy, load-test and write up your results.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>

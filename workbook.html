@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workbook · InferenceLearn</title>
+  <meta name="description" content="Inference-engineering workbook: 14 napkin-math problems with hints and step-by-step solutions, explain-it-back prompts, and hands-on experiments.">
+  <script>(function(){var t;try{t=localStorage.getItem('ie-theme')}catch(e){}if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+<!--B:head-->
+  <link rel="alternate" type="text/markdown" href="workbook.md" title="Plain-text (Markdown) version for AI assistants">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Workbook", "description": "Napkin-math problems with hints and step-by-step solutions, explain-it-back prompts and hands-on experiments.", "url": "workbook.html", "isPartOf": {"@type": "WebSite", "name": "InferenceLearn"}}</script>
+  <!--/B:head-->
+</head>
+<body data-root="." data-page="practice">
+<div id="site-header"><!--B:header--><header class="site-header"><div class="container header-inner"><a class="brand" href="index.html"><span class="brand-text">Inference<span>Learn</span></span></a><nav class="site-nav" aria-label="Main"><a href="index.html">Home</a><a href="roadmap.html">Roadmap</a><a href="learn.html">Lessons</a><a href="practice.html">Practice</a><a href="vocabulary.html">Vocab</a><a href="resources.html">Resources</a></nav></div></header><!--/B:header--></div>
+
+<main>
+  <section class="page-head container">
+    <span class="kicker">// grind zone</span>
+    <h1>Workbook</h1>
+    <p>Deep understanding comes from working things out yourself. Try each problem on paper first, then open the hint, and only then the solution.</p>
+  </section>
+
+  <section class="container prose" style="padding-top:24px">
+    <div class="card" style="margin-bottom:34px;box-shadow:6px 6px 0 var(--mint)">
+      <h3 style="margin-top:0">Your cheat sheet</h3>
+      <div class="table-wrap" style="margin:0"><table>
+        <tbody>
+          <tr><td>Forward-pass FLOPs</td><td>≈ 2 × params per token</td></tr>
+          <tr><td>Decode step (memory-bound)</td><td>≥ (weight bytes + KV bytes) ÷ bandwidth</td></tr>
+          <tr><td>Prefill time</td><td>≥ 2 × params × tokens ÷ (peak FLOP/s × MFU)</td></tr>
+          <tr><td>KV per token</td><td>2 × layers × KV heads × head dim × bytes</td></tr>
+          <tr><td>Linear-layer intensity (BF16)</td><td>≈ batch size, in FLOP/byte</td></tr>
+          <tr><td>Little's law</td><td>concurrency = throughput × latency</td></tr>
+          <tr><td>Speculative decoding</td><td>E[tokens] = (1 − α^(k+1)) ÷ (1 − α)</td></tr>
+          <tr><td>H100 SXM (approx.)</td><td>989 TFLOPS BF16 dense · 3.35 TB/s · 80 GB · ridge ≈ 295</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <h2>Part 1: Napkin-math problems</h2>
+
+    <div class="card prob" id="p1">
+      <span class="badge l1">World 1</span><span class="badge">warm-up</span>
+      <h3>P1 · How long is that answer?</h3>
+      <div class="given"><strong>Given:</strong> the model writes a 600-word answer. 1 token ≈ 0.75 words. TTFT = 400 ms, TPOT = 25 ms.<br><strong>Find:</strong> output tokens and total response time.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Convert words to tokens first, then use E2E = TTFT + TPOT × (tokens − 1).</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Tokens = 600 ÷ 0.75 = <strong>800 tokens</strong>.</li>
+        <li>Decode time = 25 ms × 799 ≈ 20.0 s.</li>
+        <li>E2E = 0.4 + 20.0 ≈ <strong>20.4 s</strong>.</li>
+      </ol><p><strong>Takeaway:</strong> long answers are almost entirely decode time. Shaving TPOT matters far more than TTFT here.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p2">
+      <span class="badge l1">World 1</span><span class="badge">roofline</span>
+      <h3>P2 · Speed of light on an A100</h3>
+      <div class="given"><strong>Given:</strong> Llama-3-8B, A100 80GB (2.04 TB/s), batch 1.<br><strong>Find:</strong> max decode tok/s in BF16, and in INT4 weight-only.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>At batch 1, step time ≈ weight bytes ÷ bandwidth. How many bytes per parameter in each format?</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>BF16: 8e9 × 2 = 16 GB → 16 ÷ 2040 s ≈ 7.8 ms → <strong>~128 tok/s</strong>.</li>
+        <li>INT4: 8e9 × 0.5 = 4 GB → ≈ 1.96 ms → <strong>~510 tok/s</strong> (in theory).</li>
+        <li>Reality: dequantization overhead, KV reads and launch overheads mean INT4 usually gives ~2–3×, not 4×.</li>
+      </ol><p><strong>Takeaway:</strong> at batch 1, bytes per weight is the speed dial.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p3">
+      <span class="badge l1">World 1</span><span class="badge">roofline</span>
+      <h3>P3 · When does decode become compute-bound?</h3>
+      <div class="given"><strong>Given:</strong> H100: 989 TFLOPS BF16, ~1979 TFLOPS FP8 (dense), 3.35 TB/s.<br><strong>Find:</strong> the batch size where linear layers become compute-bound for (a) BF16 weights and compute, (b) FP8 weights and compute.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Intensity = 2·P·B ÷ (P × bytes per param). Set it equal to the ridge point for each precision.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>(a) Ridge = 989 ÷ 3.35 ≈ 295. Intensity = 2B ÷ 2 = B, so <strong>B ≈ 295</strong>.</li>
+        <li>(b) Ridge = 1979 ÷ 3.35 ≈ 591. Intensity = 2B ÷ 1 = 2B, so 2B = 591 and <strong>B ≈ 295</strong> again!</li>
+        <li>FP8 doubles both the FLOPs and the work per byte, so the crossover batch stays the same, but every step is ~2× faster.</li>
+      </ol><p><strong>Takeaway:</strong> real batches are usually smaller than ~300 (KV memory limits them), so decode is memory-bound in most deployments.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p4">
+      <span class="badge l1">World 1</span><span class="badge">prefill</span>
+      <h3>P4 · TTFT for a long prompt</h3>
+      <div class="given"><strong>Given:</strong> 70B dense model, 8,192-token prompt, 8×H100 with TP=8, 50% MFU.<br><strong>Find:</strong> approximate prefill time (ignore the extra attention FLOPs).</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Total FLOPs = 2 × params × tokens. Divide by the cluster's effective FLOP/s.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>FLOPs = 2 × 70e9 × 8192 ≈ 1.15e15.</li>
+        <li>Effective compute = 8 × 989e12 × 0.5 ≈ 3.96e15 FLOP/s.</li>
+        <li>Time ≈ 1.15e15 ÷ 3.96e15 ≈ <strong>0.29 s</strong>. Attention adds more at long context.</li>
+      </ol><p><strong>Takeaway:</strong> prefill scales with prompt length × params. Prefix caching avoids paying it twice.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p5">
+      <span class="badge l2">World 2</span><span class="badge">KV cache</span>
+      <h3>P5 · The price of long context</h3>
+      <div class="given"><strong>Given:</strong> Llama-3-70B: 80 layers, 8 KV heads, head dim 128, BF16 KV.<br><strong>Find:</strong> KV per token, and per 32k-token sequence. What does FP8 KV change?</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>2 × layers × KV heads × head dim × bytes.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Per token = 2 × 80 × 8 × 128 × 2 = 327,680 B = <strong>320 KiB</strong>.</li>
+        <li>Per 32k sequence = 320 KiB × 32,768 = <strong>10 GiB</strong>.</li>
+        <li>FP8 KV halves it to 5 GiB, so twice as many concurrent long-context users fit.</li>
+      </ol><p><strong>Takeaway:</strong> one long-context user can need as much memory as a small model's entire weights.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p6">
+      <span class="badge l2">World 2</span><span class="badge">memory budget</span>
+      <h3>P6 · Will it fit on a 24 GB card?</h3>
+      <div class="given"><strong>Given:</strong> Qwen2.5-7B (~7.6B params; 28 layers, 4 KV heads, head dim 128) on a 24 GB GPU, 90% usable, ~1.5 GB workspace.<br><strong>Find:</strong> how many KV tokens fit with BF16 weights vs INT4 weights (~0.5 B/param)?</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>KV room = usable − weights − workspace. Then divide by KV bytes per token.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Usable = 21.6 GB. KV per token = 2 × 28 × 4 × 128 × 2 = 57,344 B = 56 KiB.</li>
+        <li>BF16 weights ≈ 15.2 GB → room = 21.6 − 15.2 − 1.5 = 4.9 GB → ≈ <strong>85k tokens</strong> (about 10 × 8k-token chats).</li>
+        <li>INT4 weights ≈ 3.8 GB → room ≈ 16.3 GB → ≈ <strong>284k tokens</strong>, about 3.3× more concurrent users.</li>
+      </ol><p><strong>Takeaway:</strong> on small GPUs, quantizing the weights mainly buys KV capacity, which means throughput.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p7">
+      <span class="badge l2">World 2</span><span class="badge">batching</span>
+      <h3>P7 · Static vs continuous by hand</h3>
+      <div class="given"><strong>Given:</strong> 2 slots. Requests arrive in order R0..R3 needing 8, 2, 2 and 8 decode steps.<br><strong>Find:</strong> total steps and slot utilization for static batching (pairs in order) vs continuous batching (fill the earliest-free slot).</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Draw a 2-row grid and fill it in. Useful work = 8+2+2+8 = 20 slot-steps.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Static: batch {R0,R1} takes max(8,2) = 8 steps, batch {R2,R3} takes 8 → <strong>16 steps</strong>, utilization 20 ÷ 32 = 62.5%.</li>
+        <li>Continuous: slot A runs R0 (0–8). Slot B runs R1 (0–2), R2 (2–4), R3 (4–12) → <strong>12 steps</strong>, utilization 20 ÷ 24 = 83%.</li>
+        <li>A perfect packing would take 10 steps. Arrival order still matters, which is why some schedulers consider predicted lengths.</li>
+      </ol><p><strong>Takeaway:</strong> continuous batching removes the straggler waste. Try more cases in the <a href="lessons/05-batching.html">simulator</a>.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p8">
+      <span class="badge l2">World 2</span><span class="badge">quantization</span>
+      <h3>P8 · Quantize four numbers by hand</h3>
+      <div class="given"><strong>Given:</strong> weights [0.10, −0.30, 0.05, 2.40], symmetric INT4 (q_max = 7).<br><strong>Find:</strong> the dequantized values with (a) one per-tensor scale, (b) per-group scales with groups of 2.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>s = max|x| ÷ 7, q = round(x ÷ s), x̂ = q × s.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>(a) s = 2.4 ÷ 7 ≈ 0.343. q = [0, −1, 0, 7], so x̂ = [<strong>0</strong>, −0.343, <strong>0</strong>, 2.40]. Two weights wiped out!</li>
+        <li>(b) Group 1 [0.10, −0.30]: s = 0.3 ÷ 7 ≈ 0.0429, q = [2, −7], x̂ = [0.086, −0.300].</li>
+        <li>Group 2 [0.05, 2.40]: s ≈ 0.343, q = [0, 7], x̂ = [0, 2.40]. Only the weight sharing a group with the outlier suffers.</li>
+      </ol><p><strong>Takeaway:</strong> outliers stretch the scale, and smaller groups contain the damage. See it live in the <a href="lessons/07-quantization.html">quantization playground</a>.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p9">
+      <span class="badge l3">World 3</span><span class="badge">speculative</span>
+      <h3>P9 · Choosing the draft length</h3>
+      <div class="given"><strong>Given:</strong> acceptance rate α = 0.7. Each draft token costs 0.1 of a target forward pass.<br><strong>Find:</strong> the ideal speedup for k = 3 and k = 6. Which is better?</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Speedup = E[tokens] ÷ (1 + k × 0.1).</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>k=3: E = (1 − 0.7⁴) ÷ 0.3 = 0.7599 ÷ 0.3 ≈ 2.53. Cost = 1.3. Speedup ≈ <strong>1.95×</strong>.</li>
+        <li>k=6: E = (1 − 0.7⁷) ÷ 0.3 = 0.9176 ÷ 0.3 ≈ 3.06. Cost = 1.6. Speedup ≈ <strong>1.91×</strong>.</li>
+        <li>k=3 wins slightly. Tokens far down the chain are rarely accepted but always cost drafting time.</li>
+      </ol><p><strong>Takeaway:</strong> the best k grows with α and shrinks with draft cost.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p10">
+      <span class="badge l3">World 3</span><span class="badge">parallelism</span>
+      <h3>P10 · Does TP=8 halve latency vs TP=4?</h3>
+      <div class="given"><strong>Given:</strong> 70B BF16, decode at small batch on H100s. 80 layers × 2 all-reduces per layer, ~20 µs each (latency-dominated).<br><strong>Find:</strong> step time at TP=4 and TP=8.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>The number of all-reduces per step doesn't depend on the TP size. Only the weight bytes per GPU do.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Communication = 160 × 20 µs = 3.2 ms per step, in both cases.</li>
+        <li>TP=4: 140 GB ÷ 4 = 35 GB per GPU → 10.4 ms → total ≈ <strong>13.6 ms</strong>.</li>
+        <li>TP=8: 17.5 GB → 5.2 ms → total ≈ <strong>8.4 ms</strong>. That's 1.6× faster, not 2×.</li>
+      </ol><p><strong>Takeaway:</strong> fixed communication latency limits TP scaling. Hence fused, low-latency all-reduce kernels.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p11">
+      <span class="badge l3">World 3</span><span class="badge">prefix caching</span>
+      <h3>P11 · What is prefix caching worth?</h3>
+      <div class="given"><strong>Given:</strong> 8B model, 3,000-token shared system prompt + 500-token user part, 1M requests/day, 90% cache hits, H100 at 50% MFU, $3/GPU-hour.<br><strong>Find:</strong> GPU-hours of prefill saved per day.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Saved tokens = hit rate × shared tokens × requests. FLOPs = 2 × params × tokens.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Saved tokens = 0.9 × 3,000 × 1M = 2.7e9 tokens/day.</li>
+        <li>FLOPs = 2 × 8e9 × 2.7e9 ≈ 4.3e19.</li>
+        <li>Effective H100 = 0.5 × 989e12 ≈ 4.9e14 FLOP/s → ≈ 87,000 s ≈ <strong>24 GPU-hours/day</strong> (≈ $72/day), plus much lower TTFT (prefill 500 tokens instead of 3,500).</li>
+      </ol><p><strong>Takeaway:</strong> stable prompt prefixes are free money. Design templates for caching.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p12">
+      <span class="badge l3">World 3</span><span class="badge">disaggregation</span>
+      <h3>P12 · Is KV transfer a deal-breaker?</h3>
+      <div class="given"><strong>Given:</strong> 8B model (128 KiB/token KV), 4,096-token prompt. Network 25 GB/s (≈200 Gb/s) or 100 GB/s. Prefill on one H100 at 50% MFU.<br><strong>Find:</strong> KV transfer time vs prefill time.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>KV bytes = tokens × per-token size.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>KV = 4096 × 128 KiB = 512 MiB ≈ 0.54 GB.</li>
+        <li>Transfer: ≈ 21 ms at 25 GB/s, ≈ 5.4 ms at 100 GB/s.</li>
+        <li>Prefill ≈ 2 × 8e9 × 4096 ÷ (0.5 × 989e12) ≈ 132 ms. So transfer adds ~16% at 25 GB/s and ~4% at 100 GB/s, and layer-by-layer streaming can hide much of it.</li>
+      </ol><p><strong>Takeaway:</strong> disaggregation needs fast links. Small models with long prompts make the trade-off the tightest.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p13">
+      <span class="badge l4">World 4</span><span class="badge">profiling</span>
+      <h3>P13 · Compute your MBU</h3>
+      <div class="given"><strong>Given:</strong> 8B BF16 model, batch 16, average context 4k tokens, measured decode step 8 ms on H100.<br><strong>Find:</strong> bytes per step, achieved bandwidth, and MBU.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Bytes = weights + KV for every sequence.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Weights = 16 GB. KV = 16 × 4096 × 128 KiB = 8 GiB ≈ 8.6 GB. Total ≈ 24.6 GB.</li>
+        <li>Achieved = 24.6 GB ÷ 8 ms ≈ 3.07 TB/s.</li>
+        <li>MBU = 3.07 ÷ 3.35 ≈ <strong>92%</strong>. Suspiciously high: double-check the context lengths and timing before celebrating.</li>
+      </ol><p><strong>Takeaway:</strong> MBU tells you how much speed is left. Over ~90% usually means a measurement mistake.</p></div></details>
+    </div>
+
+    <div class="card prob" id="p14">
+      <span class="badge l4">World 4</span><span class="badge">capacity</span>
+      <h3>P14 · Fleet size and cost</h3>
+      <div class="given"><strong>Given:</strong> 5M requests/day, 400 output tokens each, peak traffic = 3× average, benchmarked knee = 3,000 output tok/s per GPU, 30% headroom, $3/GPU-hour.<br><strong>Find:</strong> peak GPU count, and $/1M tokens for a static fleet vs perfect autoscaling.</div>
+      <details class="quiz"><summary>Hint</summary><div class="ans"><p>Average tok/s = requests × tokens ÷ 86,400. Size for the peak, then compare with what you actually use.</p></div></details>
+      <details class="quiz"><summary>Step-by-step solution</summary><div class="ans"><ol class="steps">
+        <li>Average = 5e6 × 400 ÷ 86,400 ≈ 23,100 tok/s. Peak ≈ 69,400 tok/s.</li>
+        <li>Peak GPUs = 69,400 ÷ 3,000 ≈ 23.1, plus 30% → <strong>~31 GPUs</strong>.</li>
+        <li>Static fleet: 31 × $3 × 24 = $2,232/day for 2,000M tokens → <strong>$1.12 per 1M</strong>.</li>
+        <li>Autoscaling at average load: 23,100 ÷ 3,000 × 1.3 ≈ 10 GPUs → ~$720/day → <strong>~$0.36 per 1M</strong>.</li>
+      </ol><p><strong>Takeaway:</strong> utilization can matter as much as kernel speed. Idle GPUs are the most expensive ones.</p></div></details>
+    </div>
+
+    <h2>Part 2: Explain it back (Feynman checks)</h2>
+    <p>If you can explain something simply, you understand it. Answer each one out loud in under a minute, without notes. Then check against the lesson, or ask an AI tutor to grade you.</p>
+    <ol>
+      <li>Explain to a non-engineer why a chatbot's first word takes longer than each word after it.</li>
+      <li>Explain why making the GPU's math twice as fast doesn't make single-user chat twice as fast.</li>
+      <li>Explain the KV cache using the analogy of taking notes in a meeting.</li>
+      <li>Explain why serving 100 users at once can cost almost the same per step as serving 1.</li>
+      <li>Explain continuous batching using a restaurant, a bus or a sushi conveyor belt.</li>
+      <li>Explain how FlashAttention can be faster while doing <em>more</em> arithmetic (recomputation) than naive attention.</li>
+      <li>Explain why an outlier ruins INT8 quantization, using a ruler analogy.</li>
+      <li>Explain why speculative decoding can't change the model's answers.</li>
+      <li>Explain why a 600B-parameter MoE model can run faster per token than a 70B dense model, but still need more GPUs.</li>
+      <li>Explain to a product manager why putting the user's name at the start of the system prompt costs money.</li>
+    </ol>
+
+    <h2>Part 3: Hands-on experiments</h2>
+    <p>Small experiments that turn the theory into numbers. A single consumer or cloud GPU is enough for most of them.</p>
+
+    <div class="card prob">
+      <h3>E1 · Measure prefill vs decode</h3>
+      <p>Using the naive loop from <a href="lessons/01-how-inference-works.html">lesson 1-1</a> with a small model, time the first token vs the rest for prompts of 100, 1,000 and 4,000 tokens. Plot TTFT against prompt length. <strong>Expect:</strong> TTFT grows with the prompt; per-token decode time stays nearly flat (with a KV cache).</p>
+    </div>
+    <div class="card prob">
+      <h3>E2 · Find your batching curve</h3>
+      <p>Run decode at batch 1, 2, 4 … 256 and record step time. Plot system tok/s and per-user tok/s. <strong>Expect:</strong> step time barely moves at first (memory-bound), then rises linearly once you pass the ridge or hit attention costs.</p>
+    </div>
+    <div class="card prob">
+      <h3>E3 · Benchmark a real server</h3>
+<pre><code><span class="c"># terminal 1: start a server</span>
+vllm serve Qwen/Qwen2.5-1.5B-Instruct --max-model-len <span class="n">8192</span>
+
+<span class="c"># terminal 2: load-test it (see `vllm bench serve --help` for dataset options)</span>
+vllm bench serve --model Qwen/Qwen2.5-1.5B-Instruct --dataset-name random \
+  --random-input-len <span class="n">1024</span> --random-output-len <span class="n">256</span> --num-prompts <span class="n">500</span> --request-rate <span class="n">8</span></code></pre>
+      <p>Sweep <code>--request-rate</code> and record TTFT/TPOT p50 and p99. Find the knee. <em>(CLI flags change between versions, so check <code>--help</code>.)</em></p>
+    </div>
+    <div class="card prob">
+      <h3>E4 · Prefix caching A/B</h3>
+      <p>Send requests sharing a 2,000-token system prompt, with prefix caching on and off. Compare TTFT and the hit-rate metric on <code>/metrics</code>. Then put a timestamp at the start of the prompt and watch the hit rate collapse.</p>
+    </div>
+    <div class="card prob">
+      <h3>E5 · Quantize and evaluate</h3>
+      <p>Serve the same model in BF16, FP8 (if your GPU supports it) and an AWQ/GPTQ INT4 checkpoint. Measure throughput at batch 1 and batch 64, and score a small eval (e.g. 100 GSM8K-style math questions). Fill in a table of speed vs accuracy.</p>
+    </div>
+    <div class="card prob">
+      <h3>E6 · Profile a decode step</h3>
+<pre><code>nsys profile -o trace --trace=cuda,nvtx python my_decode_loop.py
+<span class="c"># open trace.nsys-rep in Nsight Systems: look for gaps between kernels</span></code></pre>
+      <p>Compare eager mode, <code>torch.compile</code>, and CUDA graphs. Count kernels per step and the idle gaps.</p>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:30px">
+      <a class="card" href="practice.html#arcade"><span class="badge pink">play</span><h3>Quiz Arcade ▶</h3><p class="muted" style="font-size:13.5px;margin:0">Check what stuck.</p></a>
+      <a class="card" href="interview.html"><span class="badge l3">prepare</span><h3>Interview Prep ▶</h3><p class="muted" style="font-size:13.5px;margin:0">Use these numbers in interview answers.</p></a>
+    </div>
+    <div data-ai-box></div>
+  </section>
+</main>
+
+<div id="site-footer"><!--B:footer--><footer class="site-footer"><div class="container footer-inner"><p>InferenceLearn: learn how LLMs are served fast and cheap.</p><div class="footer-links"><a href="roadmap.html">Roadmap</a><a href="practice.html">Quiz</a><a href="interview.html">Interview prep</a><a href="workbook.html">Workbook</a><a href="vocabulary.html">Vocabulary</a><a href="llms.txt">llms.txt</a></div></div></footer><!--/B:footer--></div>
+<!--B:scripts--><script src="assets/js/data.js"></script><script src="assets/js/main.js"></script><script src="assets/js/widgets.js"></script><script src="assets/js/practice.js"></script><!--/B:scripts-->
+</body>
+</html>
